@@ -1,10 +1,9 @@
-//= require jquery
-//= require handlebars-1.0.0.beta.6
-//= require templates
+//= require jquery3
+//= require handlebars.runtime
 //= require main
-//= require home
-//= require inbox
-//= require mobile
-//= require profile
-//= require people
+//= require fine-uploader/fine-uploader.core
+//= require mobile/mobile
+//= require jquery.autoSuggest.custom
+//= require contact-list
 //= require sinon
+//= require jasmine-ajax

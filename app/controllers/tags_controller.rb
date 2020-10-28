@@ -1,12 +1,15 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
 class TagsController < ApplicationController
-  skip_before_filter :set_grammatical_gender
-  before_filter :ensure_page, :only => :show
+  before_action :ensure_page, :only => :show
 
   helper_method :tag_followed?
+
+  layout proc { request.format == :mobile ? "application" : "with_header" }, only: :show
 
   respond_to :html, :only => [:show]
   respond_to :json, :only => [:index, :show]
@@ -23,8 +26,8 @@ class TagsController < ApplicationController
       end
     else
       respond_to do |format|
-        format.json{ render :nothing => true, :status => 422 }
-        format.html{ redirect_to tag_path('partytimeexcellent') }
+        format.json { head :unprocessable_entity }
+        format.html { redirect_to tag_path("partytimeexcellent") }
       end
     end
   end
@@ -35,9 +38,15 @@ class TagsController < ApplicationController
     if user_signed_in?
       gon.preloads[:tagFollowings] = tags
     end
-    @stream = Stream::Tag.new(current_user, params[:name], :max_time => max_time, :page => params[:page])
+    stream = Stream::Tag.new(current_user, params[:name], max_time: max_time, page: params[:page])
+    @stream = TagStreamPresenter.new(stream)
     respond_with do |format|
-      format.json { render :json => @stream.stream_posts.map { |p| LastThreeCommentsDecorator.new(PostPresenter.new(p, current_user)) }}
+      format.json do
+        posts = stream.stream_posts.map do |p|
+          LastThreeCommentsDecorator.new(PostPresenter.new(p, current_user))
+        end
+        render json: posts
+      end
     end
   end
 
@@ -57,9 +66,9 @@ class TagsController < ApplicationController
   end
 
   def prep_tags_for_javascript
-    @tags.map! do |tag|
+    @tags = @tags.map {|tag|
       { :name  => ("#" + tag.name) }
-    end
+    }
 
     @tags << { :name  => ('#' + params[:q]) }
     @tags.uniq!

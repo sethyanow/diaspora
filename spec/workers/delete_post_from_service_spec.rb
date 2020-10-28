@@ -1,16 +1,13 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
 describe Workers::DeletePostFromService do
-  before do
-    @user = alice
-    @post = @user.post(:status_message, :text => "hello", :to =>@user.aspects.first.id, :public =>true, :facebook_id => "23456" )
-  end
+  it "calls service#delete_from_service with given opts" do
+    service = double
+    opts = {twitter_id: "23456"}
 
-  it 'calls service#delete_post with given service' do
-    m = double()
-    url = "foobar"
-    m.should_receive(:delete_post)
-    Service.stub(:find_by_id).and_return(m)
-    Workers::DeletePostFromService.new.perform("123", @post.id.to_s)
+    expect(service).to receive(:delete_from_service).with(opts)
+    allow(Service).to receive(:find_by_id).with("123").and_return(service)
+
+    Workers::DeletePostFromService.new.perform("123", opts)
   end
 end

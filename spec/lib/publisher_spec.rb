@@ -1,5 +1,4 @@
-
-require 'spec_helper'
+# frozen_string_literal: true
 
 describe Publisher do
   before do
@@ -8,29 +7,22 @@ describe Publisher do
 
   describe "#prefill" do
     it 'defaults to nothing' do
-      @publisher.prefill.should be_blank
+      expect(@publisher.prefill).to be_blank
     end
 
     it 'is settable' do
-      Publisher.new(alice, :prefill => "party!").prefill.should == "party!"
+      expect(Publisher.new(alice, :prefill => "party!").prefill).to eq("party!")
     end
   end
 
-  describe '#text' do
-    it 'is a formatted version of the prefill' do
-      p = Publisher.new(alice, :prefill => "@{alice; alice@pod.com}")
-      p.text.should == "alice"
-    end
-  end
-
-  ["open", "public", "explain"].each do |property|
-    describe "##{property}?" do
+  %w(open public).each do |property|
+    describe "##{property}" do
       it 'defaults to closed' do
-        @publisher.send("#{property}?".to_sym).should be_false
+        expect(@publisher.send("#{property}".to_sym)).to be_falsey
       end
 
       it 'listens to the opts' do
-        Publisher.new(alice, {property.to_sym => true}).send("#{property}?".to_sym).should be_true
+        expect(Publisher.new(alice, property.to_sym => true).send("#{property}".to_sym)).to be true
       end
     end
   end

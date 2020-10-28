@@ -1,121 +1,109 @@
-#   Copyright (c) 2010-2012, Diaspora Inc.  This file is
-#   licensed under the Affero General Public License version 3 or later.  See
-#   the COPYRIGHT file.
-
 sq:
-  errors:
-    messages:
-      not_found: "nuk u gjet"
-      already_confirmed: "është ripohuar tashmë"
-      not_locked: "nuk qe kyçur"
-
   devise:
-    failure:
-      unauthenticated: 'Duhet të bëni hyrjen ose të regjistroheni, përpara se të vazhdohet.'
-      unconfirmed: 'Duhet të ripohoni llogarinë tuaj, përpara se të vazhdohet.'
-      locked: 'Llogaria juaj është e kyçur.'
-      invalid: 'Emër përdoruesi ose fjalëkalim i gabuar.'
-      invalid_token: 'Mekanizëm ose të dhëna të pavlefshme mirëfilltësimi.'
-      timeout: 'Sesionit tuaj i mbaroi koha, ju lutem, hyni sërish që të vazhdoni.'
-      inactive: 'Llogaria juaj ende nuk është aktive.'
-    sessions:
-      new:
-        login: 'Hyni'
-        username: 'Emër përdoruesi'
-        password: 'Fjalëkalim'
-        sign_in: 'Hyni'
-        remember_me: "Mbamë mend"
-        alpha_software: 'Ju ndan një hap nga përdorimi i një programi në stad alfa.'
-        bugs_and_feedback: 'Ta dini që tani: do të hasni të meta.  Ju nxisim të përdorni butonin Përshtypje në anën e djathtë të shfletuesit tuaj që të raportoni çfarëdo bllokimi!  Do të punojmë sa më shpejt që të mundemi për të zgjidhur çfarëdo çështje që na raportoni.'
-        bugs_and_feedback_mobile: 'Ta dini që tani, do të hasni të meta.  Ju nxisim të raportoni çfarëdo bllokimi!  Do të punojmë sa më shpejt që të mundemi për të zgjidhur çfarëdo çështje që na raportoni.'
-        modern_browsers: 'mbulon vetëm shfletues modernë.'
-      signed_in: 'Hytë me sukses.'
-      signed_out: 'Dolët me sukses.'
-    passwords:
-      send_instructions: "Brenda pak minutash do t'ju vijë email me udhëzime si të ricaktoni fjalëkalimin tuaj."
-      updated: 'Fjalëkalimi juaj u ndryshua me sukses. Tani jeni i futur.'
-      edit:
-        change_password: "Ndërroje fjalëkalimin tim"
-      new:
-        forgot_password: "Harruat fjalëkalimin?"
-        no_account: 'Nuk ka llogari me këtë email.  Nëse po prisni për një ftesë, po shpërndajmë të tilla aq shpejt sa mundemi'
-        send_password_instructions: "Dërgomë udhëzime ricaktimi fjalëkalimi"
     confirmations:
-      send_instructions: "Brenda pak minutash do t'ju vijë një email me udhëzime se si të ripohoni llogarinë tuaj."
-      confirmed: 'Llogaria juaj u ripohua me sukses. Tani jeni i futur.'
+      confirmed: Adresa juaj email u ripohua me sukses.
+      send_instructions: Brenda pak minutash do t’ju vijë një email me udhëzime se si të ripohoni adresën tuaj email.
+      send_paranoid_instructions: Nëse adresa juaj email ekziston në bazën tonë të të dhënave, brenda pak minutash do të merrni një email me udhëzime se si të ripohoni adresën tuaj email.
       new:
-        resend_confirmation: "Ridërgo udhëzime ripohimi" 
-    registrations:
-      signed_up: 'U regjistruat me sukses. Po qe se mundësia përkatëse është e aktivizuar, ju është dërguar një mesazh ripohimi te e-mail-i juaj.'
-      updated: 'E përditësuat me sukses llogarinë tuaj.'
-      destroyed: "Shëndet! Llogaria juaj u anulua me sukses. Shpresojmë t'ju shohim prapë së shpejti."
-    unlocks:
-      send_instructions: "Brenda pak minutash do t'ju vijë një email me udhëzime se si zhbllokoni llogarinë."
-      unlocked: 'Llogaria juaj u zhbllokua me sukses. Tani jeni i futur.'
-      new:
-        resend_unlock: "Ridërgoji udhësimet për zhbllokim"
-    invitations:
-      send_instructions: 'Ftesa juaj u dërgua.'
-      invitation_token_invalid: 'Ndjesën tonë! Ky mekanizëm ose këto të dhëna ftese nuk janë të vlefshme.'
-      updated: 'Fjalëkalimi juaj u caktua me sukses. Tani jeni i futur.'
+        resend_confirmation: Ridërgo udhëzime ripohimi
+    failure:
+      already_authenticated: Jeni i futur tashmë.
+      inactive: Llogaria juaj ende s’është aktive.
+      invalid: "%{authentication_keys} ose fjalëkalim i pavlefshëm."
+      locked: Llogaria juaj është e kyçur.
+      last_attempt: Keni edhe një provë, përpara se llogaria juaj të kyçet.
+      not_found_in_database: "%{authentication_keys} ose fjalëkalim i pavlefshëm."
+      timeout: Sesioni juaj skadoi. Ju lutemi, ribëni hyrjen, që të vazhdoni.
+      unauthenticated: Duhet të bëni hyrjen ose të regjistroheni, përpara se të vazhdohet.
+      unconfirmed: Duhet të ripohoni adresën tuaj email, përpara se të vazhdohet.
+      invalid_token: Token i pavlefshëm mirëfilltësimi.
     mailer:
-      welcome: "Mirë se vini %{email}!"
-      hello: "Tungjatjeta %{email}!"
       confirmation_instructions:
-        subject: 'Udhëzime ripohimi'
+        subject: Udhëzime ripohimi
         you_can_confirm: "Llogarinë tuaj mund të ripohoni përmes lidhjes më poshtë:"
-        confirm: "Ripohoje llogarinë time"
+        confirm: Ripohoje llogarinë time
       reset_password_instructions:
-        subject: 'Udhëzime ricaktimi fjalëkalimi'
-        someone_requested: "Dikush kërkoi një lidhje për ndryshimin e fjalëkalimit tuaj, dhe këtë mund ta bëni përmes lidhjes më poshtë."
-        change: "Ndërroje fjalëkalimin tim"
-        wont_change: "Fjalëkalimi juaj nuk do të ndryshojë pa përdorur lidhjen e mësipërme për të krijuar një të ri."
-        ignore: "Nëse këtë nuk e kërkuat ju, ju lutem, shpërfilleni këtë email."
+        subject: Udhëzime ricaktimi fjalëkalimi
+        someone_requested: Dikush kërkoi një lidhje për ndryshimin e fjalëkalimit tuaj. Nëse qetë ju, këtë mund ta bëni përmes lidhjes më poshtë.
+        change: Ndryshoje fjalëkalimin tim
+        wont_change: Fjalëkalimi juaj s’do të ndryshohet pa u përdorur lidhja më sipër për të krijuar një të ri.
+        ignore: Nëse këtë s’e kërkuat ju, ju lutemi, shpërfilleni këtë email.
       unlock_instructions:
-        subject: 'Udhëzime zhbllokimi'
-        account_locked: "Llogari juaj është bllokuar për shkak të një sasie të tepruar përpjekjesh për të hyrë në të."
-        click_to_unlock: "Që të zhbllokoni llogarinë tuaj, klikoni lidhjen e mëposhtme:"
-        unlock: "Zhbllokoje llogarinë time"
-      invitation_instructions:
-        displaying_correctly: "Nuk shfaqet si duhet email-i? %{link}"
-        view_in: "Shiheni te shlfetuesi juaj."
-        finally: "Më në fund - ja ku është"
-        arrived: "Rrjeti shoqëror që keni pritur, mbërriti. I rishikuar, më i sigurt, dhe më zbavitës, %{strong_diaspora} është gati t'ju ndihmojë të ndani me të tjerët dhe të eksploroni gjithçka në web nën një rrugë të re."
-        sign_up_now: "Regjistrohuni tani &rarr;"
-        friends_saying: "Ç'thonë miqtë tuaj..."
-        more_people: "Më tepër persona janë të ngazëllyer t'ju shohin!"
-        get_connected: "Lidhuni"
-        get_connected_paragraph: "Një lëvizje ndërkombëtare me një vizion të përbashkët për një web më të mirë, veçoria #1 e %{strong_diaspora}-s është bashkësia e saj. Njihuni me njerëz të rinj, lidhuni me miqtë, dhe merrni pjesë në zbavitje."
-        be_yourself: "Jini Vetvetja"
-        be_yourself_paragraph: "Interneti ka krijuar rrugë të reja unike që të shprehim vetveten. %{strong_diaspora} ju lejon të jeni vetvetja dhe të ndani me të tjerët çfarëdo që dëshironi, me ose pa emrin tuaj të vërtetë."
-        have_fun: "Zbavituni"
-        cubbies: "Cubbi.es"
-        have_fun_paragraph: "%{strong_diaspora} do të thotë zbulim online lënde dhe personash të rinj mahnitës. %{link}, zbatimi i parë në botë për %{strong_diaspora} është thjesht fillimi. Mblidhni dhe ndani me të tjerët gjëra nga web-i në tërë madhështinë e tij."
-        made_by_people: "%{strong_diaspora} është krijuar nga njerëz që e duan Internetin po aq sa ju. %{jointeam}, ose %{helpfund}!"
-        join_team: "Bëhuni Pjesë e Ekipit Tonë"
-        or: "ose"
-        help_fund: "ndihmoni në financimin e Diaspora-s"
-        unsubscribe: "Që të çregjistroheni, ju lutem, klikoni mbi %{link}."
-        here: "këtu"
-        love: "Me dashuri,"
-        team_diaspora: "Ekipi i Diaspora-s"
-        email_us: "Për pyetje dhe kërkesa të përgjithshme, ose për asistencë lidhur me llogarinë tuaj në Diaspora, ju lutem, na dërgoni një email te %{email}."
-        email_address: "questions@joindiaspora.com"
-        subject: "Jeni ftuar të merrni pjesë te Diaspora!"
-        accept: "Pranojeni ftesën"
-        ignore: "Nëse nuk doni ta pranoni ftesën, ju lutem, shpërfilleni këtë email."
-        no_account_till: "Llogaria juaj nuk do të krijohet pa shkuar te lidhja e mësipërme që të regjistroheni."
+        subject: Udhëzime shkyçjeje
+        account_locked: Llogaria juaj është kyçur për shkak të një sasie të tepruar përpjekjesh të pasuksesshme për të hyrë në të.
+        click_to_unlock: "Që të shkyçet llogaria juaj, klikoni lidhjen më poshtë:"
+        unlock: Shkyçe llogarinë time
+      password_change:
+        subject: Fjalëkalimi Ndryshoi
+      welcome: Mirë se vini te %{email}!
+      hello: Tungjatjeta %{email}!
       inviter:
         has_invited_you: "%{name}"
-        have_invited_you: "%{names} ju ka ftuar të merrni pjesë në Diaspora"
-        accept_at: "te %{url}, mund ta pranoni përmes lidhjes më poshtë."
+        have_invited_you: "%{names} ju ka ftuar të merrni pjesë në diaspora*"
+        accept_at: te %{url}, mund ta pranoni përmes lidhjes më poshtë.
+    omniauth_callbacks:
+      failure: S’u bë dot mirëfilltësimi juaj nga %{kind}, ngaqë %{reason}.
+      success: U bë me sukses mirëfilltësimi juaj nga llogaria %{kind}.
+    passwords:
+      no_token: S’mund të hyni në këtë faqe pa ardhur nga një email ricaktimi fjalëkalimi. Nëse vini prej një email-i ricaktimi fjalëkalimi, ju lutemi, sigurohuni që përdorët ULR-në e plotë të dhënë atje.
+      send_instructions: Brenda pak minutash do t’ju vijë një email me udhëzime se si të ricaktoni fjalëkalimin tuaj.
+      send_paranoid_instructions: Nëse adresa juaj email ekziston në bazën tonë të të dhënave, brenda pak minutash do të merrni një email rikthimi fjalëkalimesh.
+      updated: Fjalëkalimi juaj u ndryshua me sukses. Tani jeni i futur.
+      updated_not_active: Fjalëkalimi juaj u ndryshua me sukses.
+      edit:
+        change_password: Ndryshoje fjalëkalimin tim
+        new_password: Fjalëkalim i ri
+        confirm_password: Ripohoni fjalëkalimin
+      new:
+        forgot_password: Harruat fjalëkalimin?
+        no_account: S’ka llogari me këtë email
+        reset_password: Ricaktoni fjalëkalimin
+        email: Adresë email
+        send_password_instructions: Dërgomëni udhëzime ricaktimi fjalëkalimi
+    registrations:
+      destroyed: Shëndet! Llogaria juaj u fshi me sukses. Shpresojmë t’ju shohim prapë së shpejti.
+      signed_up: U regjistruat me sukses. Në qoftë e aktivizuar mundësia përkatëse, ju është dërguar një mesazh ripohimi te email-i juaj.
+      signed_up_but_inactive: Jeni regjistruar me sukses. Megjithatë, s’e bëmë dot hyrjen tuaj, ngaqë llogaria juaj s’është ende aktive.
+      signed_up_but_locked: Jeni regjistruar me sukses. Megjithatë, s’e bëmë dot hyrjen tuaj, ngaqë llogaria juaj është e kyçur.
+      signed_up_but_unconfirmed: Te adresa juaj email është dërguar një mesazh me një lidhje ripohimi. Ju lutemi, që të aktivizoni llogarinë tuaj, ndiqni lidhjen.
+      update_needs_confirmation: E përditësuat me sukses llogarinë tuaj, por na duhet të verifikojmë adresën tuaj të re email. Ju lutemi, që të ripohoni adresën tuaj të re email kontrolloni email-in tuaj.
+      updated: Llogaria juaj u përditësua me sukses.
+    sessions:
+      signed_in: Hytë me sukses.
+      signed_out: Dolët me sukses.
+      already_signed_out: Dolët me sukses.
+      new:
+        login: Hyni
+        username: Emër përdoruesi
+        password: Fjalëkalim
+        sign_in: Hyni
+        remember_me: Mbamë mend
+        modern_browsers: mbulohen vetëm shfletues modernë.
+    unlocks:
+      send_instructions: Brenda pak minutash do t’ju vijë një email me udhëzime se si të shkyçni llogarinë tuaj.
+      send_paranoid_instructions: Nëse llogaria juaj ekziston, brenda pak minutash do t’ju vijë një email me udhëzime se si ta shkyçni. 
+      unlocked: Llogaria juaj u shkyç me sukses. Ju lutemi, që të vazhdohet, bëni hyrjen.
+      new:
+        resend_unlock: Ridërgo udhëzime shkyçjeje
+    invitations:
+      send_instructions: Ftesa juaj u dërgua.
+      invitation_token_invalid: Ndjesën tonë! Ky mekanizëm ftese s’është i vlefshëm.
+      updated: Fjalëkalimi juaj u caktua me sukses. Tani jeni i futur.
     shared:
-      mail_signup_form:
-        sign_up_for_an_invite: "Regjistrohuni për një ftesë!"
       links:
-        sign_in: 'Hyni'
-        sign_up: 'Regjistrohuni'
-        sign_up_closed: 'Hëpërhë regjistrimet janë të mbyllura.'
-        forgot_your_password: 'Harruat fjalëkalimin tuaj?'
-        receive_confirmation: "Nuk i morët udhëzimet për ripohimin?"
-        receive_unlock: "Nuk i morët udhëzimet për zhbllokimin?"
+        sign_in: Hyni
+        sign_up: Krijoni llogari
+        sign_up_closed: Regjistrimet e lira janë të mbyllura hëpërhë.
+        forgot_your_password: Harruat fjalëkalimin tuaj?
+        receive_confirmation: S’i morët udhëzimet për ripohimin?
+        receive_unlock: S’i morët udhëzimet për shkyçjen?
+  errors:
+    messages:
+      already_confirmed: është ripohuar tashmë, ju lutemi, provoni të bëni hyrjen
+      confirmation_period_expired: lypset të ripohohet brenda %{period}, ju lutemi, kërkoni një të ri
+      expired: ka skaduar, ju lutemi, kërkoni një të ri
+      not_found: s’u gjet
+      not_locked: s’qe kyçur
+      not_saved:
+        one: "1 gabim ia pengoi ruajtjen këtij %{resource}:"
+        other: "%{count} gabime ia penguan ruajtjen këtij %{resource}:"

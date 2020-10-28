@@ -1,29 +1,31 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-require 'spec_helper'
-
 describe "i18n interpolation fallbacks" do
   describe "when string does not require interpolation arguments" do
     it "works normally" do
-      I18n.t('user.invalid',
-             :resource_name => "user",
-             :scope => "devise.failure",
-             :default => [:invalid, "invalid"]).should == "Invalid username or password."
+      expect(
+        I18n.t("user.already_authenticated",
+               resource_name: "user",
+               scope:         "devise.failure",
+               default:       [:already_authenticated, "already_authenticated"])
+      ).to eq("You are already signed in.")
     end
   end
   describe "when string requires interpolation arguments" do
     context "current locale has no fallbacks" do
-      # ago: "%{time} ago" (in en.yml)
+      # tags.show.follow: "Follow #%{tag}" (in en.yml)
       it "returns the translation when all arguments are provided" do
-        I18n.t('ago', :time => "2 months").should == "2 months ago"
+        expect(I18n.t("tags.show.follow", tag: "cats")).to eq("Follow #cats")
       end
       it "returns the translation without substitution when all arguments are omitted" do
-        I18n.t('ago').should == "%{time} ago"
+        expect(I18n.t("tags.show.follow")).to eq("Follow #%{tag}")
       end
       it "raises a MissingInterpolationArgument when arguments are wrong" do
-        expect { I18n.t('ago', :not_time => "2 months") }.to raise_exception(I18n::MissingInterpolationArgument)
+        expect { I18n.t("tags.show.follow", not_tag: "cats") }.to raise_exception(I18n::MissingInterpolationArgument)
       end
     end
     context "current locale falls back to English" do
@@ -37,19 +39,19 @@ describe "i18n interpolation fallbacks" do
       end
       describe "when all arguments are provided" do
         it "returns the locale's translation" do
-          I18n.t('nonexistant_key', :random_key => "Hi Alex,").should == "Hi Alex, here is some Italian"
+          expect(I18n.t('nonexistant_key', :random_key => "Hi Alex,")).to eq("Hi Alex, here is some Italian")
         end
       end
       describe "when no arguments are provided" do
         it "returns the locale's translation without substitution" do
-          I18n.t('nonexistant_key').should == "%{random_key} here is some Italian"
+          expect(I18n.t('nonexistant_key')).to eq("%{random_key} here is some Italian")
         end
       end
       describe "when arguments are wrong" do
         describe "when the English translation works" do
           it "falls back to English" do
             I18n.backend.store_translations('en', {"nonexistant_key" => "Working English translation"})
-            I18n.t('nonexistant_key', :hey => "what").should == "Working English translation"
+            expect(I18n.t('nonexistant_key', :hey => "what")).to eq("Working English translation")
           end
         end
         describe "when the English translation does not work" do

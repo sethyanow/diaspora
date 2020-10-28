@@ -1,260 +1,181 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe Reshare do
-  include Rails.application.routes.url_helpers
-
-  it 'has a valid Factory' do
-    FactoryGirl.build(:reshare).should be_valid
+describe Reshare, type: :model do
+  it "has a valid Factory" do
+    expect(FactoryGirl.build(:reshare)).to be_valid
   end
 
-  it 'requires root' do
-    reshare = FactoryGirl.build(:reshare, :root => nil)
-    reshare.should_not be_valid
+  context "validation" do
+    it "requires root when the author is local" do
+      reshare = FactoryGirl.build(:reshare, root: nil, author: alice.person)
+      expect(reshare).not_to be_valid
+    end
+
+    it "doesn't require root when the author is remote" do
+      reshare = FactoryGirl.build(:reshare, root: nil, author: remote_raphael)
+      expect(reshare).to be_valid
+    end
+
+    it "require public root" do
+      reshare = FactoryGirl.build(:reshare, root: FactoryGirl.create(:status_message, public: false))
+      expect(reshare).not_to be_valid
+      expect(reshare.errors[:base]).to include("Only posts which are public may be reshared.")
+    end
+
+    it "allows two reshares without a root" do
+      reshare1 = FactoryGirl.create(:reshare, author: alice.person)
+      reshare2 = FactoryGirl.create(:reshare, author: alice.person)
+
+      reshare1.update_attributes(root_guid: nil)
+
+      reshare2.root_guid = nil
+      expect(reshare2).to be_valid
+    end
+
+    it "doesn't allow to reshare the same post twice" do
+      post = FactoryGirl.create(:status_message, public: true)
+      FactoryGirl.create(:reshare, author: alice.person, root: post)
+
+      expect(FactoryGirl.build(:reshare, author: alice.person, root: post)).not_to be_valid
+    end
+
+    it "allows to reshare the same post with different people" do
+      post = FactoryGirl.create(:status_message, public: true)
+      FactoryGirl.create(:reshare, author: alice.person, root: post)
+
+      expect(FactoryGirl.build(:reshare, author: bob.person, root: post)).to be_valid
+    end
   end
 
-  it 'require public root' do
-    reshare = FactoryGirl.build(:reshare, :root => FactoryGirl.create(:status_message, :public => false))
-    reshare.should_not be_valid
-    reshare.errors[:base].should include('Only posts which are public may be reshared.')
+  it "forces public" do
+    expect(FactoryGirl.create(:reshare, public: false).public).to be true
   end
 
-  it 'forces public' do
-    FactoryGirl.create(:reshare, :public => false).public.should be_true
+  describe "#root_diaspora_id" do
+    let(:reshare) { create(:reshare, root: FactoryGirl.build(:status_message, author: bob.person, public: true)) }
+
+    it "should return the root diaspora id" do
+      expect(reshare.root_diaspora_id).to eq(bob.person.diaspora_handle)
+    end
+
+    it "should be nil if no root found" do
+      reshare.root = nil
+      expect(reshare.root_diaspora_id).to be_nil
+    end
   end
 
   describe "#receive" do
-    let(:receive_reshare) { @reshare.receive(@root.author.owner, @reshare.author) }
+    let(:reshare) { create(:reshare, root: FactoryGirl.build(:status_message, author: bob.person, public: true)) }
 
-    before do
-      @reshare = FactoryGirl.create(:reshare, :root => FactoryGirl.build(:status_message, :author => bob.person, :public => true))
-      @root = @reshare.root
-    end
-
-    it 'increments the reshare count' do
-      receive_reshare
-      @root.resharers.count.should == 1
-    end
-
-    it 'adds the resharer to the re-sharers of the post' do
-      receive_reshare
-      @root.resharers.should include(@reshare.author)
-    end
-    it 'does not error if the root author has a contact for the resharer' do
-      bob.share_with @reshare.author, bob.aspects.first
-      proc {
-        Timeout.timeout(5) do
-          receive_reshare #This doesn't ever terminate on my machine before it was fixed.
-        end
-      }.should_not raise_error
+    it "participates root author in the reshare" do
+      reshare.receive([])
+      expect(Participation.where(target_id: reshare.id, author_id: bob.person.id).count).to eq(1)
     end
   end
 
-  describe '#nsfw' do
-    before do
-      sfw  = FactoryGirl.build(:status_message, :author => alice.person, :public => true)
-      nsfw = FactoryGirl.build(:status_message, :author => alice.person, :public => true, :text => "This is #nsfw")
-      @sfw_reshare = FactoryGirl.build(:reshare, :root => sfw)
-      @nsfw_reshare = FactoryGirl.build(:reshare, :root => nsfw)
-    end
+  describe "#nsfw" do
+    let(:sfw) { build(:status_message, author: alice.person, public: true) }
+    let(:nsfw) { build(:status_message, author: alice.person, public: true, text: "This is #nsfw") }
+    let(:sfw_reshare) { build(:reshare, root: sfw) }
+    let(:nsfw_reshare) { build(:reshare, root: nsfw) }
 
-    it 'deletates #nsfw to the root post' do
-      @sfw_reshare.nsfw.should_not be_true
-      @nsfw_reshare.nsfw.should be_true
+    it "deletates #nsfw to the root post" do
+      expect(sfw_reshare.nsfw).not_to be true
+      expect(nsfw_reshare.nsfw).to be_truthy
     end
   end
 
-  describe '#notification_type' do
-    before do
-      sm = FactoryGirl.build(:status_message, :author => alice.person, :public => true)
-      @reshare = FactoryGirl.build(:reshare, :root => sm)
-    end
-    it 'does not return anything for non-author of the original post' do
-      @reshare.notification_type(bob, @reshare.author).should be_nil
-    end
+  describe "#poll" do
+    let(:root_post) { create(:status_message_with_poll, public: true) }
+    let(:reshare) { create(:reshare, root: root_post) }
 
-    it 'returns "Reshared" for the original post author' do
-      @reshare.notification_type(alice, @reshare.author).should == Notifications::Reshared
+    it "contains root poll" do
+      expect(reshare.poll).to eq root_post.poll
     end
   end
 
-  describe '#absolute_root' do
+  describe "#absolute_root" do
     before do
-      @sm = FactoryGirl.build(:status_message, :author => alice.person, :public => true)
-      rs1 = FactoryGirl.build(:reshare, :root=>@sm)
-      rs2 = FactoryGirl.build(:reshare, :root=>rs1)
-      @rs3 = FactoryGirl.build(:reshare, :root=>rs2)
-      
-     sm = FactoryGirl.create(:status_message, :author => alice.person, :public => true)
-     rs1 = FactoryGirl.create(:reshare, :root => sm)
-     @of_deleted = FactoryGirl.build(:reshare, :root => rs1)
-     sm.destroy
-     rs1.reload
+      @status_message = FactoryGirl.build(:status_message, author: alice.person, public: true)
+      reshare_1 = FactoryGirl.build(:reshare, root: @status_message)
+      reshare_2 = FactoryGirl.build(:reshare, root: reshare_1)
+      @reshare_3 = FactoryGirl.build(:reshare, root: reshare_2)
+
+      status_message = FactoryGirl.create(:status_message, author: alice.person, public: true)
+      reshare_1 = FactoryGirl.create(:reshare, root: status_message)
+      @of_deleted = FactoryGirl.build(:reshare, root: reshare_1)
+      status_message.destroy
+      reshare_1.reload
     end
 
-    it 'resolves root posts to the top level' do
-      @rs3.absolute_root.should == @sm
+    it "resolves root posts to the top level" do
+      expect(@reshare_3.absolute_root).to eq(@status_message)
     end
 
-    it 'can handle deleted reshares' do
+    it "can handle deleted reshares" do
       expect(@of_deleted.absolute_root).to be_nil
     end
 
-    it 'is used everywhere' do
-      expect(@rs3.message).to eq @sm.message
+    it "is used everywhere" do
+      expect(@reshare_3.message).to eq @status_message.message
       expect(@of_deleted.message).to be_nil
-      expect(@rs3.photos).to eq @sm.photos
+      expect(@reshare_3.photos).to eq @status_message.photos
       expect(@of_deleted.photos).to be_empty
-      expect(@rs3.o_embed_cache).to eq @sm.o_embed_cache
+      expect(@reshare_3.o_embed_cache).to eq @status_message.o_embed_cache
       expect(@of_deleted.o_embed_cache).to be_nil
-      expect(@rs3.open_graph_cache).to eq @sm.open_graph_cache
+      expect(@reshare_3.open_graph_cache).to eq @status_message.open_graph_cache
       expect(@of_deleted.open_graph_cache).to be_nil
-      expect(@rs3.mentioned_people).to eq @sm.mentioned_people
+      expect(@reshare_3.mentioned_people).to eq @status_message.mentioned_people
       expect(@of_deleted.mentioned_people).to be_empty
-      expect(@rs3.nsfw).to eq @sm.nsfw
+      expect(@reshare_3.nsfw).to eq @status_message.nsfw
       expect(@of_deleted.nsfw).to be_nil
-      expect(@rs3.address).to eq @sm.location.try(:address)
+      expect(@reshare_3.address).to eq @status_message.location.try(:address)
       expect(@of_deleted.address).to be_nil
     end
   end
 
-  describe "XML" do
-    before do
-      @reshare = FactoryGirl.build(:reshare)
-      @xml = @reshare.to_xml.to_s
-    end
+  describe "#post_location" do
+    let(:status_message) { build(:status_message, text: "This is a status_message", author: bob.person, public: true) }
+    let(:reshare) { create(:reshare, root: status_message) }
 
-    context 'serialization' do
-      it 'serializes root_diaspora_id' do
-        @xml.should include("root_diaspora_id")
-        @xml.should include(@reshare.author.diaspora_handle)
-      end
+    context "with location" do
+      let(:location) { build(:location) }
 
-      it 'serializes root_guid' do
-        @xml.should include("root_guid")
-        @xml.should include(@reshare.root.guid)
+      it "should deliver address and coordinates" do
+        status_message.location = location
+        expect(reshare.post_location).to include(address: location.address, lat: location.lat, lng: location.lng)
       end
     end
 
-    context 'marshalling' do
-      context 'local' do
-        before do
-          @original_author = @reshare.root.author
-          @root_object = @reshare.root
-        end
-
-        it 'marshals the guid' do
-          Reshare.from_xml(@xml).root_guid.should == @root_object.guid
-        end
-
-        it 'fetches the root post from root_guid' do
-          Reshare.from_xml(@xml).root.should == @root_object
-        end
-
-        it 'fetches the root author from root_diaspora_id' do
-          Reshare.from_xml(@xml).root.author.should == @original_author
-        end
+    context "without location" do
+      it "should deliver empty address and coordinates" do
+        expect(reshare.post_location[:address]).to be_nil
+        expect(reshare.post_location[:lat]).to be_nil
+        expect(reshare.post_location[:lng]).to be_nil
       end
+    end
+  end
 
-      describe 'destroy' do
-        it 'allows you to destroy the reshare if the root post is missing' do
-          reshare = FactoryGirl.build(:reshare)
-          reshare.root = nil
+  describe "#subscribers" do
+    it "adds root author to subscribers" do
+      user = FactoryGirl.create(:user_with_aspect)
+      user.share_with(alice.person, user.aspects.first)
 
-          expect{
-            reshare.destroy
-          }.to_not raise_error
-        end
-      end
+      post = eve.post(:status_message, text: "hello", public: true)
+      reshare = FactoryGirl.create(:reshare, root: post, author: user.person)
 
-      context 'remote' do
-        before do
-          @root_object = @reshare.root
-          @root_object.delete
-          @response = double
-          @response.stub(:status).and_return(200)
-          @response.stub(:success?).and_return(true)
-        end
+      expect(reshare.subscribers).to match_array([alice.person, eve.person, user.person])
+    end
 
-        it 'fetches the root author from root_diaspora_id' do
-          @original_profile = @reshare.root.author.profile.dup
-          @reshare.root.author.profile.delete
-          @original_author = @reshare.root.author.dup
-          @reshare.root.author.delete
+    it "does not add the root author if the root post was deleted" do
+      user = FactoryGirl.create(:user_with_aspect)
+      user.share_with(alice.person, user.aspects.first)
 
-          @original_author.profile = @original_profile
+      post = eve.post(:status_message, text: "hello", public: true)
+      reshare = FactoryGirl.create(:reshare, root: post, author: user.person)
+      post.destroy
 
-          wf_prof_double = double
-          wf_prof_double.should_receive(:fetch).and_return(@original_author)
-          Webfinger.should_receive(:new).and_return(wf_prof_double)
-
-          @response.stub(:body).and_return(@root_object.to_diaspora_xml)
-
-          Faraday.default_connection.should_receive(:get).with(@original_author.url + short_post_path(@root_object.guid, :format => "xml")).and_return(@response)
-          Reshare.from_xml(@xml)
-        end
-
-        context "fetching post" do
-          it "doesn't error out if the post is not found" do
-            @response.stub(:status).and_return(404)
-            Faraday.default_connection.should_receive(:get).and_return(@response)
-
-            expect {
-              Reshare.from_xml(@xml)
-            }.to_not raise_error
-          end
-
-          it "raises if there's another error receiving the post" do
-            @response.stub(:status).and_return(500)
-            @response.stub(:success?).and_return(false)
-            Faraday.default_connection.should_receive(:get).and_return(@response)
-
-            expect {
-              Reshare.from_xml(@xml)
-            }.to raise_error RuntimeError
-          end
-        end
-
-        context 'saving the post' do
-          before do
-            @response.stub(:body).and_return(@root_object.to_diaspora_xml)
-            Faraday.default_connection.stub(:get).with(@reshare.root.author.url + short_post_path(@root_object.guid, :format => "xml")).and_return(@response)
-          end
-
-          it 'fetches the root post from root_guid' do
-            root = Reshare.from_xml(@xml).root
-
-            [:text, :guid, :diaspora_handle, :type, :public].each do |attr|
-              root.send(attr).should == @reshare.root.send(attr)
-            end
-          end
-
-          it 'correctly saves the type' do
-            Reshare.from_xml(@xml).root.reload.type.should == "StatusMessage"
-          end
-
-          it 'correctly sets the author' do
-            @original_author = @reshare.root.author
-            Reshare.from_xml(@xml).root.reload.author.reload.should == @original_author
-          end
-
-          it 'verifies that the author of the post received is the same as the author in the reshare xml' do
-            @original_author = @reshare.root.author.dup
-            @xml = @reshare.to_xml.to_s
-
-            different_person = FactoryGirl.build(:person)
-
-            wf_prof_double = double
-            wf_prof_double.should_receive(:fetch).and_return(different_person)
-            Webfinger.should_receive(:new).and_return(wf_prof_double)
-
-            different_person.stub(:url).and_return(@original_author.url)
-
-            lambda{
-              Reshare.from_xml(@xml)
-            }.should raise_error /^Diaspora ID \(.+\) in the root does not match the Diaspora ID \(.+\) specified in the reshare!$/
-          end
-        end
-      end
+      expect(reshare.reload.subscribers).to match_array([alice.person, user.person])
     end
   end
 end

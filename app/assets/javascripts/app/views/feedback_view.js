@@ -1,3 +1,5 @@
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
+
 app.views.Feedback = app.views.Base.extend({
   templateName: "feedback",
 
@@ -6,18 +8,17 @@ app.views.Feedback = app.views.Base.extend({
   events: {
     "click .like" : "toggleLike",
     "click .reshare" : "resharePost",
-    "click .post_report" : "report"
   },
 
   tooltipSelector : ".label",
 
   initialize : function() {
-    this.model.interactions.on('change', this.render, this);
-    this.initViews && this.initViews() // I don't know why this was failing with $.noop... :(
+    this.model.interactions.on("change", this.render, this);
+    this.initViews && this.initViews(); // I don't know why this was failing with $.noop... :(
   },
 
   presenter : function() {
-    var interactions = this.model.interactions
+    var interactions = this.model.interactions;
 
     return _.extend(this.defaultPresenter(),{
       commentsCount : interactions.commentsCount(),
@@ -26,7 +27,7 @@ app.views.Feedback = app.views.Base.extend({
       userCanReshare : interactions.userCanReshare(),
       userLike : interactions.userLike(),
       userReshare : interactions.userReshare()
-    })
+    });
   },
 
   toggleLike: function(evt) {
@@ -40,3 +41,4 @@ app.views.Feedback = app.views.Base.extend({
     this.model.interactions.reshare();
   }
 });
+// @license-end

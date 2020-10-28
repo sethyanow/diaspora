@@ -5,20 +5,18 @@
 
 
 hi:
-  _photos: "तस्वीरें"
+  _services: "सेवाएं"
   account: "खाता"
-  application:
-    helper:
-      unknown_person: "अजनबी"
+  are_you_sure: "क्या आपको यकीन है?"
   aspects:
-    edit:
-      add_existing: "मौजूदा संपर्क जोड़ें"
     index:
       help:
         tag_question: "प्रश्न"
   cancel: "रद्द करें"
+  delete: "मिटाओ"
   email: "ईमेल"
-  or: "अथवा"
+  ok: "ठीक"
+  privacy: "गोपनीयता"
   profile: "प्रोफ़ाइल"
-  terms_and_conditions: "नियम और शर्तें"
-  welcome: "आपका स्वागत है!"
+  settings: "विन्यास"
+  username: "उपयोगकर्ता नाम"

@@ -1,59 +1,71 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-require 'spec_helper'
-
-describe StatusMessage do
+describe StatusMessage, type: :model do
   include PeopleHelper
 
-  before do
-    @user = alice
-    @aspect = @user.aspects.first
+  let!(:user) { alice }
+  let!(:aspect) { user.aspects.first }
+  let(:status) { build(:status_message) }
+
+  it_behaves_like "a shareable" do
+    let(:object) { status }
   end
 
-  describe 'scopes' do
-    describe '.where_person_is_mentioned' do
-      it 'returns status messages where the given person is mentioned' do
-        @bo = bob.person
-        @test_string = "@{Daniel; #{@bo.diaspora_handle}} can mention people like Raph"
+  describe "scopes" do
+    describe ".where_person_is_mentioned" do
+      it "returns status messages where the given person is mentioned" do
+        @bob = bob.person
+        @test_string = "@{Daniel; #{@bob.diaspora_handle}} can mention people like Raph"
+        post1 = FactoryGirl.create(:status_message, text: @test_string, public: true)
+        post2 = FactoryGirl.create(:status_message, text: @test_string, public: true)
+        FactoryGirl.create(:status_message, text: @test_string)
+        FactoryGirl.create(:status_message, public: true)
 
-       FactoryGirl.create(:status_message, :text => @test_string )
-       FactoryGirl.create(:status_message, :text => @test_string )
-       FactoryGirl.create(:status_message)
-
-       StatusMessage.where_person_is_mentioned(@bo).count.should == 2
+        expect(StatusMessage.where_person_is_mentioned(@bob).ids).to match_array([post1.id, post2.id])
       end
     end
 
     context "tag_streams" do
       before do
-        @sm1 = FactoryGirl.create(:status_message, :text => "#hashtag" , :public => true)
-        @sm2 = FactoryGirl.create(:status_message, :text => "#hashtag" )
-        @sm3 = FactoryGirl.create(:status_message, :text => "hashtags are #awesome", :public => true )
-        @sm4 = FactoryGirl.create(:status_message, :text => "hashtags are #awesome" )
+        @status_message_1 = FactoryGirl.create(:status_message, text: "#hashtag", public: true)
+        @status_message_2 = FactoryGirl.create(:status_message, text: "#hashtag")
+        @status_message_3 = FactoryGirl.create(:status_message, text: "hashtags are #awesome", public: true)
+        @status_message_4 = FactoryGirl.create(:status_message, text: "hashtags are #awesome")
 
-        @tag_id = ActsAsTaggableOn::Tag.where(:name => "hashtag").first.id
+        @tag_id = ActsAsTaggableOn::Tag.where(name: "hashtag").first.id
       end
 
-      describe '.tag_steam' do
-        it 'returns status messages tagged with the tag' do
+      describe ".tag_steam" do
+        it "returns status messages tagged with the tag" do
           tag_stream = StatusMessage.send(:tag_stream, [@tag_id])
-          tag_stream.should include @sm1
-          tag_stream.should include @sm2
+          expect(tag_stream).to include @status_message_1
+          expect(tag_stream).to include @status_message_2
         end
       end
 
-      describe '.public_tag_stream' do
-        it 'returns public status messages tagged with the tag' do
-          StatusMessage.public_tag_stream([@tag_id]).should == [@sm1]
+      describe ".public_tag_stream" do
+        it "returns public status messages tagged with the tag" do
+          expect(StatusMessage.public_tag_stream([@tag_id])).to eq([@status_message_1])
+        end
+
+        it "returns a post with two tags only once" do
+          status_message = FactoryGirl.create(:status_message, text: "#hashtag #test", public: true)
+          test_tag_id = ActsAsTaggableOn::Tag.where(name: "test").first.id
+
+          expect(StatusMessage.public_tag_stream([@tag_id, test_tag_id]))
+            .to match_array([@status_message_1, status_message])
         end
       end
 
-      describe '.user_tag_stream' do
-        it 'returns tag stream thats owned or visibile by' do
-          StatusMessage.should_receive(:owned_or_visible_by_user).with(bob).and_return(StatusMessage)
-          StatusMessage.should_receive(:tag_stream).with([@tag_id])
+      describe ".user_tag_stream" do
+        it "returns tag stream thats owned or visible by" do
+          relation = double
+          expect(StatusMessage).to receive(:owned_or_visible_by_user).with(bob).and_return(relation)
+          expect(relation).to receive(:tag_stream).with([@tag_id])
 
           StatusMessage.user_tag_stream(bob, [@tag_id])
         end
@@ -62,382 +74,260 @@ describe StatusMessage do
   end
 
   describe ".guids_for_author" do
-    it 'returns an array of the status_message guids' do
-      sm1 = FactoryGirl.create(:status_message, :author => alice.person)
-      sm2 = FactoryGirl.create(:status_message, :author => bob.person)
+    it "returns an array of the status_message guids" do
+      status_message_1 = FactoryGirl.create(:status_message, author: alice.person)
+      FactoryGirl.create(:status_message, author: bob.person)
       guids = StatusMessage.guids_for_author(alice.person)
-      guids.should == [sm1.guid]
+      expect(guids).to eq([status_message_1.guid])
     end
   end
 
-  describe '.before_create' do
-    it 'calls build_tags' do
-      status = FactoryGirl.build(:status_message)
-      status.should_receive(:build_tags)
-      status.save
-    end
-
-    it 'calls filter_mentions' do
-      status = FactoryGirl.build(:status_message)
-      status.should_receive(:filter_mentions)
+  describe ".before_validation" do
+    it "calls build_tags" do
+      expect(status).to receive(:build_tags)
       status.save
     end
   end
 
-  describe '.after_create' do
-    it 'calls create_mentions' do
-      status = FactoryGirl.build(:status_message, text: "text @{Test; #{alice.diaspora_handle}}")
-      status.should_receive(:create_mentions).and_call_original
+  describe ".before_create" do
+    it "calls build_tags" do
+      expect(status).to receive(:build_tags)
       status.save
     end
   end
 
-  describe '#diaspora_handle=' do
-    it 'sets #author' do
-      person = FactoryGirl.create(:person)
-      post = FactoryGirl.build(:status_message, :author => @user.person)
-      post.diaspora_handle = person.diaspora_handle
-      post.author.should == person
-    end
-  end
-
-  context "emptyness" do
+  context "emptiness" do
     it "needs either a message or at least one photo" do
-      n = @user.build_post(:status_message, :text => nil)
-      n.should_not be_valid
+      post = user.build_post(:status_message, text: nil)
+      expect(post).not_to be_valid
 
-      n.text = ""
-      n.should_not be_valid
+      post.text = ""
+      expect(post).not_to be_valid
 
-      n.text = "wales"
-      n.should be_valid
-      n.text = nil
+      post.text = "wales"
+      expect(post).to be_valid
+      post.text = nil
 
-      photo = @user.build_post(:photo, :user_file => uploaded_photo, :to => @aspect.id)
+      photo = user.build_post(:photo, user_file: uploaded_photo, to: aspect.id)
       photo.save!
 
-      n.photos << photo
-      n.should be_valid
-      n.errors.full_messages.should == []
+      post.photos << photo
+      expect(post).to be_valid
+      expect(post.message.to_s).to be_empty
+      expect(post.text).to be_nil
+      expect(post.nsfw).to be_falsey
+      expect(post.errors.full_messages).to eq([])
     end
 
-    it "doesn't check for content when author is remote (federation...)" do
-      p = FactoryGirl.build(:status_message, text: nil)
-      p.should be_valid
+    it "also checks for content when author is remote" do
+      post = FactoryGirl.build(:status_message, text: nil)
+      expect(post).not_to be_valid
     end
   end
 
-  it 'should be postable through the user' do
+  it "should be postable through the user" do
     message = "Users do things"
-    status = @user.post(:status_message, :text => message, :to => @aspect.id)
+    status = user.post(:status_message, text: message, to: aspect.id)
     db_status = StatusMessage.find(status.id)
-    db_status.text.should == message
+    expect(db_status.text).to eq(message)
   end
 
-  it 'should require status messages not be more than 65535 characters long' do
-    message = 'a' * (65535+1)
-    status_message = FactoryGirl.build(:status_message, :text => message)
-    status_message.should_not be_valid
+  it "should require status messages not be more than 65535 characters long" do
+    message = "a" * (65_535 + 1)
+    status_message = FactoryGirl.build(:status_message, text: message)
+    expect(status_message).not_to be_valid
   end
 
-  describe 'mentions' do
-    before do
-      @people = [alice, bob, eve].map{|u| u.person}
-      @test_string = <<-STR
-@{Raphael; #{@people[0].diaspora_handle}} can mention people like Raphael @{Ilya; #{@people[1].diaspora_handle}}
-can mention people like Raphaellike Raphael @{Daniel; #{@people[2].diaspora_handle}} can mention people like Raph
-STR
-      @sm = FactoryGirl.create(:status_message, :text => @test_string )
+  it_behaves_like "it is mentions container"
+
+  describe "#people_allowed_to_be_mentioned" do
+    it "returns only aspects members for private posts" do
+      sm = FactoryGirl.build(:status_message_in_aspect)
+      sm.author.owner.share_with(alice.person, sm.author.owner.aspects.first)
+      sm.author.owner.share_with(eve.person, sm.author.owner.aspects.first)
+      sm.save!
+
+      expect(sm.people_allowed_to_be_mentioned).to match_array([alice.person_id, eve.person_id])
     end
 
-    describe '#create_mentions' do
-      it 'creates a mention for everyone mentioned in the message' do
-        Diaspora::Mentionable.should_receive(:people_from_string).and_return(@people)
-        @sm.mentions.delete_all
-        @sm.create_mentions
-        @sm.mentions(true).map{|m| m.person}.to_set.should == @people.to_set
-      end
-
-      it 'does not barf if it gets called twice' do
-        @sm.create_mentions
-
-        expect{
-          @sm.create_mentions
-        }.to_not raise_error
-      end
-    end
-
-    describe '#mentioned_people' do
-      it 'calls create_mentions if there are no mentions in the db' do
-        @sm.mentions.delete_all
-        @sm.should_receive(:create_mentions)
-        @sm.mentioned_people
-      end
-      it 'returns the mentioned people' do
-        @sm.mentions.delete_all
-        @sm.mentioned_people.to_set.should == @people.to_set
-      end
-      it 'does not call create_mentions if there are mentions in the db' do
-        @sm.should_not_receive(:create_mentions)
-        @sm.mentioned_people
-      end
-    end
-
-    describe "#mentions?" do
-      it 'returns true if the person was mentioned' do
-        @sm.mentions?(@people[0]).should be_true
-      end
-
-      it 'returns false if the person was not mentioned' do
-        @sm.mentions?(FactoryGirl.build(:person)).should be_false
-      end
-    end
-
-    describe "#notify_person" do
-      it 'notifies the person mentioned' do
-        Notification.should_receive(:notify).with(alice, anything, anything)
-        @sm.notify_person(alice.person)
-      end
-    end
-
-    describe "#filter_mentions" do
-      it 'calls Diaspora::Mentionable#filter_for_aspects' do
-        msg = FactoryGirl.build(:status_message_in_aspect)
-
-        msg_txt = msg.raw_message
-        author_usr = msg.author.owner
-        aspect_id = author_usr.aspects.first.id
-
-        Diaspora::Mentionable.should_receive(:filter_for_aspects)
-                             .with(msg_txt, author_usr, aspect_id)
-
-        msg.send(:filter_mentions)
-      end
-
-      it "doesn't do anything when public" do
-        msg = FactoryGirl.build(:status_message, public: true)
-        Diaspora::Mentionable.should_not_receive(:filter_for_aspects)
-
-        msg.send(:filter_mentions)
-      end
+    it "returns :all for public posts" do
+      expect(FactoryGirl.create(:status_message, public: true).people_allowed_to_be_mentioned).to eq(:all)
     end
   end
+
+  it_behaves_like "a reference source"
+  it_behaves_like "a reference target"
 
   describe "#nsfw" do
-    it 'returns MatchObject (true) if the post contains #nsfw (however capitalised)' do
-      status  = FactoryGirl.build(:status_message, :text => "This message is #nSFw")
-      status.nsfw.should be_true
+    it "returns MatchObject (true) if the post contains #nsfw (however capitalised)" do
+      status = FactoryGirl.build(:status_message, text: "This message is #nSFw")
+      expect(status.nsfw).to be_truthy
     end
 
-    it 'returns nil (false) if the post does not contain #nsfw' do
-      status  = FactoryGirl.build(:status_message, :text => "This message is #sFW")
-      status.nsfw.should be_false
+    it "returns nil (false) if the post does not contain #nsfw" do
+      status = FactoryGirl.build(:status_message, text: "This message is #sFW")
+      expect(status.nsfw).to be false
     end
   end
 
-  describe 'tags' do
-    before do
-      @object = FactoryGirl.build(:status_message)
+  describe "#comment_email_subject" do
+    it "delegates to message.title if the post have a text" do
+      expect(status.comment_email_subject).to eq(status.message.title)
     end
-    it_should_behave_like 'it is taggable'
 
-    it 'associates different-case tags to the same tag entry' do
+    it "includes the photos count if there are photos without text" do
+      photo = FactoryGirl.build(:photo, public: true)
+      status = FactoryGirl.build(:status_message, author: photo.author, text: nil, photos: [photo], public: true)
+      expect(status.comment_email_subject).to eq(I18n.t("posts.show.photos_by", count: 1, author: status.author_name))
+    end
+  end
+
+  describe "tags" do
+    it_should_behave_like "it is taggable" do
+      let(:object) { build(:status_message) }
+    end
+
+    it "associates different-case tags to the same tag entry" do
       assert_equal ActsAsTaggableOn.force_lowercase, true
 
-      msg_lc = FactoryGirl.build(:status_message, :text => '#newhere')
-      msg_uc = FactoryGirl.build(:status_message, :text => '#NewHere')
-      msg_cp = FactoryGirl.build(:status_message, :text => '#NEWHERE')
+      msg_lc = FactoryGirl.build(:status_message, text: "#newhere")
+      msg_uc = FactoryGirl.build(:status_message, text: "#NewHere")
+      msg_cp = FactoryGirl.build(:status_message, text: "#NEWHERE")
 
-      msg_lc.save; msg_uc.save; msg_cp.save
+      msg_lc.save
+      msg_uc.save
+      msg_cp.save
 
       tag_array = msg_lc.tags
       expect(msg_uc.tags).to match_array(tag_array)
       expect(msg_cp.tags).to match_array(tag_array)
     end
-  end
 
-  describe "XML" do
-    before do
-      @message = FactoryGirl.build(:status_message, :text => "I hate WALRUSES!", :author => @user.person)
-      @xml = @message.to_xml.to_s
-    end
-    it 'serializes the escaped, unprocessed message' do
-      text = "[url](http://example.org)<script> alert('xss should be federated');</script>"
-      @message.text = text
-      @message.to_xml.to_s.should include Builder::XChar.encode(text)
-    end
-
-    it 'serializes the message' do
-      @xml.should include "<raw_message>I hate WALRUSES!</raw_message>"
-    end
-
-    it 'serializes the author address' do
-      @xml.should include(@user.person.diaspora_handle)
-    end
-
-    describe '.from_xml' do
-      before do
-        @marshalled = StatusMessage.from_xml(@xml)
-      end
-      it 'marshals the message' do
-        @marshalled.text.should == "I hate WALRUSES!"
-      end
-      it 'marshals the guid' do
-        @marshalled.guid.should == @message.guid
-      end
-      it 'marshals the author' do
-        @marshalled.author.should == @message.author
-      end
-      it 'marshals the diaspora_handle' do
-        @marshalled.diaspora_handle.should == @message.diaspora_handle
-      end
-    end
-
-    context 'with some photos' do
-      before do
-        @message.photos << FactoryGirl.build(:photo)
-        @message.photos << FactoryGirl.build(:photo)
-        @xml = @message.to_xml.to_s
-      end
-
-      it 'serializes the photos' do
-        @xml.should include "photo"
-        @xml.should include @message.photos.first.remote_photo_path
-      end
-
-      describe '.from_xml' do
-        before do
-          @marshalled = StatusMessage.from_xml(@xml)
-        end
-
-        it 'marshals the photos' do
-          @marshalled.photos.size.should == 2
-        end
-      end
-    end
-
-    context 'with a location' do
-      before do
-        @message.location = Location.new(coordinates: "1, 2").tap(&:save)
-        @xml = @message.to_xml.to_s
-      end
-
-      it 'serializes the location' do
-        @xml.should include "location"
-        @xml.should include "lat"
-        @xml.should include "lng"
-      end
-
-      describe ".from_xml" do
-        before do
-          @marshalled = StatusMessage.from_xml(@xml)
-        end
-
-        it 'marshals the location' do
-          @marshalled.location.should be_present
-        end
-      end
-    end
-
-    context 'with a poll' do
-      before do
-        @message.poll = FactoryGirl.create(:poll, :status_message => @message)
-        @xml = @message.to_xml.to_s
-      end
-
-      it 'serializes the poll' do
-        @xml.should include "poll"
-        @xml.should include "question"
-        @xml.should include "poll_answer"
-      end
-
-      describe ".from_xml" do
-        before do
-          @marshalled = StatusMessage.from_xml(@xml)
-        end
-
-        it 'marshals the poll' do
-          @marshalled.poll.should be_present
-        end
-
-        it 'marshals the poll answers' do
-          @marshalled.poll.poll_answers.size.should == 2
-        end
-      end
-    end
-
-
-  end
-
-  describe '#after_dispatch' do
-    before do
-      @photos = [alice.build_post(:photo, :pending => true, :user_file=> File.open(photo_fixture_name)),
-                 alice.build_post(:photo, :pending => true, :user_file=> File.open(photo_fixture_name))]
-
-      @photos.each(&:save!)
-
-      @status_message = alice.build_post(:status_message, :text => "the best pebble.")
-        @status_message.photos << @photos
-
-      @status_message.save!
-      alice.add_to_streams(@status_message, alice.aspects)
-    end
-    it 'sets pending to false on any attached photos' do
-      @status_message.after_dispatch(alice)
-      @photos.all?{|p| p.reload.pending}.should be_false
-    end
-    it 'dispatches any attached photos' do
-      alice.should_receive(:dispatch_post).twice
-      @status_message.after_dispatch(alice)
+    it "should require tag name not be more than 255 characters long" do
+      message = "##{'a' * (255 + 1)}"
+      status_message = FactoryGirl.build(:status_message, text: message)
+      expect(status_message).not_to be_valid
     end
   end
 
-  describe 'oembed' do
-    before do
-      @youtube_url = "https://www.youtube.com/watch?v=3PtFwlKfvHI"
-      @message_text = "#{@youtube_url} is so cool. so is this link -> https://joindiaspora.com"
+  describe "oembed" do
+    let(:youtube_url) { "https://www.youtube.com/watch?v=3PtFwlKfvHI" }
+    let(:message_text) { "#{youtube_url} is so cool. so is this link -> https://joindiaspora.com" }
+    let(:status_message) { FactoryGirl.build(:status_message, text: message_text) }
+
+    it "should queue a GatherOembedData if it includes a link" do
+      status_message
+      expect(Workers::GatherOEmbedData).to receive(:perform_async).with(kind_of(Integer), instance_of(String))
+      status_message.save
     end
 
-    it 'should queue a GatherOembedData if it includes a link' do
-      sm = FactoryGirl.build(:status_message, :text => @message_text)
-      Workers::GatherOEmbedData.should_receive(:perform_async).with(instance_of(Fixnum), instance_of(String))
-      sm.save
-    end
-
-    describe '#contains_oembed_url_in_text?' do
-      it 'returns the oembed urls found in the raw message' do
-        sm = FactoryGirl.build(:status_message, :text => @message_text)
-        sm.contains_oembed_url_in_text?.should_not be_nil
-        sm.oembed_url.should == @youtube_url
+    describe "#contains_oembed_url_in_text?" do
+      it "returns the oembed urls found in the raw message" do
+        expect(status_message.contains_oembed_url_in_text?).not_to be_nil
+        expect(status_message.oembed_url).to eq(youtube_url)
       end
     end
   end
 
-  describe 'opengraph' do
-    before do
-      @ninegag_url = "http://9gag.com/gag/a1AMW16"
-      @youtube_url = "https://www.youtube.com/watch?v=3PtFwlKfvHI"
-      @message_text = "#{@ninegag_url} is so cool. so is this link -> https://joindiaspora.com"
-      @oemessage_text = "#{@youtube_url} is so cool. so is this link -> https://joindiaspora.com"
+  describe "opengraph" do
+    let(:ninegag_url) { "http://9gag.com/gag/a1AMW16" }
+    let(:youtube_url) { "https://www.youtube.com/watch?v=3PtFwlKfvHI" }
+    let(:message_text) { "#{ninegag_url} is so cool. so is this link -> https://joindiaspora.com" }
+    let(:oemessage_text) { "#{youtube_url} is so cool. so is this link -> https://joindiaspora.com" }
+    let(:status_message) { build(:status_message, text: message_text) }
+
+    it "should queue a GatherOpenGraphData if it includes a link" do
+      status_message
+      expect(Workers::GatherOpenGraphData).to receive(:perform_async).with(kind_of(Integer), instance_of(String))
+      status_message.save
     end
 
-    it 'should queue a GatherOpenGraphData if it includes a link' do
-      sm = FactoryGirl.build(:status_message, :text => @message_text)
-      Workers::GatherOpenGraphData.should_receive(:perform_async).with(instance_of(Fixnum), instance_of(String))
-      sm.save
+    describe "#contains_open_graph_url_in_text?" do
+      it "returns the opengraph urls found in the raw message" do
+        expect(status_message.contains_open_graph_url_in_text?).not_to be_nil
+        expect(status_message.open_graph_url).to eq(ninegag_url)
+      end
+      it "returns nil if the link is from trusted oembed provider" do
+        status_message = FactoryGirl.build(:status_message, text: oemessage_text)
+        expect(status_message.contains_open_graph_url_in_text?).to be_nil
+        expect(status_message.open_graph_url).to be_nil
+      end
+    end
+  end
+
+  describe "poll" do
+    it "destroys the poll (with all answers and participations) when the status message is destroyed" do
+      poll = FactoryGirl.create(:poll_participation).poll
+      status_message = poll.status_message
+
+      poll_id = poll.id
+      poll_answers = poll.poll_answers.map(&:id)
+      poll_participations = poll.poll_participations.map(&:id)
+
+      status_message.destroy
+
+      expect(Poll.where(id: poll_id)).not_to exist
+      poll_answers.each {|id| expect(PollAnswer.where(id: id)).not_to exist }
+      poll_participations.each {|id| expect(PollParticipation.where(id: id)).not_to exist }
+    end
+  end
+
+  describe "validation" do
+    let(:status_message) { build(:status_message, text: @message_text) }
+
+    it "should not be valid if the author is missing" do
+      status_message.author = nil
+      expect(status_message).not_to be_valid
+    end
+  end
+
+  describe "#coordinates" do
+    let(:status_message) { build(:status_message, text: @message_text) }
+
+    context "with location" do
+      let(:location) { build(:location) }
+
+      it "should deliver address and coordinates" do
+        status_message.location = location
+        expect(status_message.post_location).to include(address: location.address, lat: location.lat, lng: location.lng)
+      end
     end
 
-    describe '#contains_open_graph_url_in_text?' do
-      it 'returns the opengraph urls found in the raw message' do
-        sm = FactoryGirl.build(:status_message, :text => @message_text)
-        sm.contains_open_graph_url_in_text?.should_not be_nil
-        sm.open_graph_url.should == @ninegag_url
+    context "without location" do
+      it "should deliver empty address and coordinates" do
+        expect(status_message.post_location[:address]).to be_nil
+        expect(status_message.post_location[:lat]).to be_nil
+        expect(status_message.post_location[:lng]).to be_nil
       end
-      it 'returns nil if the link is from trusted oembed provider' do
-        sm = FactoryGirl.build(:status_message, :text => @oemessage_text)
-        sm.contains_open_graph_url_in_text?.should be_nil
-        sm.open_graph_url.should be_nil
-      end
+    end
+  end
+
+  describe "#receive" do
+    let(:post) { FactoryGirl.create(:status_message, author: alice.person) }
+
+    it "receives attached photos" do
+      photo = FactoryGirl.create(:photo, status_message: post)
+
+      post.receive([bob.id])
+
+      expect(ShareVisibility.where(user_id: bob.id, shareable_id: post.id, shareable_type: "Post").count).to eq(1)
+      expect(ShareVisibility.where(user_id: bob.id, shareable_id: photo.id, shareable_type: "Photo").count).to eq(1)
+    end
+
+    it "works without attached photos" do
+      post.receive([bob.id])
+
+      expect(ShareVisibility.where(user_id: bob.id, shareable_id: post.id, shareable_type: "Post").count).to eq(1)
+    end
+
+    it "works with already received attached photos" do
+      photo = FactoryGirl.create(:photo, status_message: post)
+
+      photo.receive([bob.id])
+      post.receive([bob.id])
+
+      expect(ShareVisibility.where(user_id: bob.id, shareable_id: post.id, shareable_type: "Post").count).to eq(1)
+      expect(ShareVisibility.where(user_id: bob.id, shareable_id: photo.id, shareable_type: "Photo").count).to eq(1)
     end
   end
 end

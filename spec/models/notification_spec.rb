@@ -1,10 +1,10 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-require 'spec_helper'
-
-describe Notification do
+describe Notification, :type => :model do
   before do
     @sm = FactoryGirl.create(:status_message)
     @person = FactoryGirl.create(:person)
@@ -21,7 +21,7 @@ describe Notification do
 
   it 'destoys the associated notification_actor' do
     @note.save
-    lambda{@note.destroy}.should change(NotificationActor, :count).by(-1)
+    expect{@note.destroy}.to change(NotificationActor, :count).by(-1)
   end
 
   describe '.for' do
@@ -34,96 +34,53 @@ describe Notification do
       @opts.delete(:recipient_id)
       Notification.create(@opts.merge(:recipient_id => user2.id))
 
-      Notification.for(@user).count.should == 4
+      expect(Notification.for(@user).count).to eq(4)
     end
   end
 
   describe 'set_read_state method' do
     it "should set an unread notification to read" do
       @note.unread = true
+      @note.save
       @note.set_read_state( true )
-      @note.unread.should == false
+      expect(@note.unread).to eq(false)
     end
+
     it "should set an read notification to unread" do
       @note.unread = false
+      @note.save
       @note.set_read_state( false )
-      @note.unread.should == true
+      expect(@note.unread).to eq(true)
     end
-
   end
 
+  describe ".concatenate_or_create" do
+    it "creates a new notification if the notification does not exist" do
+      Notification.concatenate_or_create(alice, @sm, eve.person)
+      notification = Notification.find_by(recipient: alice, target: @sm)
+      expect(notification.actors).to eq([eve.person])
+    end
 
-  describe '.concatenate_or_create' do
-    it 'creates a new notificiation if the notification does not exist, or if it is unread' do
+    it "creates a new notification if the notification is unread" do
       @note.unread = false
       @note.save
-      Notification.count.should == 1
-      Notification.concatenate_or_create(@note.recipient, @note.target, @note.actors.first, Notifications::CommentOnPost)
-      Notification.count.should == 2
+      expect(Notification.count).to eq(1)
+      Notification.concatenate_or_create(@note.recipient, @note.target, eve.person)
+      expect(Notification.count).to eq(2)
     end
-  end
-  describe '.notify' do
-    context 'with a request' do
-      before do
-        @request = Request.diaspora_initialize(:from => @user.person, :to => @user2.person, :into => @aspect)
-      end
 
-      it 'calls Notification.create if the object has a notification_type' do
-        Notification.should_receive(:make_notification).once
-        Notification.notify(@user, @request, @person)
-      end
+    it "appends the actors to the already existing notification" do
+      notification = Notification.create_notification(alice, @sm, @person)
+      expect {
+        Notification.concatenate_or_create(alice, @sm, eve.person)
+      }.to change(notification.actors, :count).by(1)
+    end
 
-      describe '#emails_the_user' do
-        it 'calls mail' do
-          opts = {
-            :actors => [@person],
-            :recipient_id => @user.id}
-
-            n = Notifications::StartedSharing.new(opts)
-            n.stub(:recipient).and_return @user
-
-            @user.should_receive(:mail)
-            n.email_the_user(@request, @person)
-        end
-      end
-
-      context 'multiple likes' do
-        it 'concatinates the like notifications' do
-          p = FactoryGirl.build(:status_message, :author => @user.person)
-          person2 = FactoryGirl.build(:person)
-          notification = Notification.notify(@user, FactoryGirl.build(:like, :author => @person, :target => p), @person)
-          notification2 =  Notification.notify(@user, FactoryGirl.build(:like, :author => person2, :target => p), person2)
-          notification.id.should == notification2.id
-        end
-      end
-
-      context 'multiple comments' do
-        it 'concatinates the comment notifications' do
-          p = FactoryGirl.build(:status_message, :author => @user.person)
-          person2 = FactoryGirl.build(:person)
-          notification = Notification.notify(@user, FactoryGirl.build(:comment, :author => @person, :post => p), @person)
-          notification2 =  Notification.notify(@user, FactoryGirl.build(:comment, :author => person2, :post => p), person2)
-          notification.id.should == notification2.id
-        end
-      end
-
-      context 'multiple people' do
-        before do
-          @user3 = bob
-          @sm = @user3.post(:status_message, :text => "comment!", :to => :all)
-          Postzord::Receiver::Private.new(@user3, :person => @user2.person, :object => @user2.comment!(@sm, "hey")).receive_object
-          Postzord::Receiver::Private.new(@user3, :person => @user.person, :object => @user.comment!(@sm, "hey")).receive_object
-        end
-
-        it "updates the notification with a more people if one already exists" do
-          Notification.where(:recipient_id => @user3.id, :target_type => @sm.class.base_class, :target_id => @sm.id).first.actors.count.should == 2
-        end
-
-        it 'handles double comments from the same person without raising' do
-          Postzord::Receiver::Private.new(@user3, :person => @user2.person, :object => @user2.comment!(@sm, "hey")).receive_object
-          Notification.where(:recipient_id => @user3.id, :target_type => @sm.class.base_class, :target_id => @sm.id).first.actors.count.should == 2
-        end
-      end
+    it "doesn't append the actor to an existing notification if it is already there" do
+      notification = Notification.create_notification(alice, @sm, @person)
+      expect {
+        Notification.concatenate_or_create(alice, @sm, @person)
+      }.not_to change(notification.actors, :count)
     end
   end
 end

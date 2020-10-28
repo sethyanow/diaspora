@@ -1,4 +1,6 @@
-class OEmbedCache < ActiveRecord::Base
+# frozen_string_literal: true
+
+class OEmbedCache < ApplicationRecord
   serialize :data
   validates :data, :presence => true
 
@@ -10,10 +12,10 @@ class OEmbedCache < ActiveRecord::Base
     t.add :data
   end
 
-  def self.find_or_create_by_url(url)
-   cache = OEmbedCache.find_or_initialize_by_url(url)
+  def self.find_or_create_by(opts)
+   cache = OEmbedCache.find_or_initialize_by(opts)
    return cache if cache.persisted?
-   cache.fetch_and_save_oembed_data!
+   cache.fetch_and_save_oembed_data! # make after create callback and drop this method ?
    cache
   end
 

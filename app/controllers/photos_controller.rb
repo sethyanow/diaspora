@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
 class PhotosController < ApplicationController
-  before_filter :authenticate_user!, :except => :show
-
+  before_action :authenticate_user!, except: %i(show index)
   respond_to :html, :json
 
   def show
@@ -20,24 +21,21 @@ class PhotosController < ApplicationController
   def index
     @post_type = :photos
     @person = Person.find_by_guid(params[:person_id])
+    authenticate_user! if @person.try(:remote?) && !user_signed_in?
+    @presenter = PersonPresenter.new(@person, current_user)
 
     if @person
-      @contact = current_user.contact_for(@person)
-
-      if @contact
-        @contacts_of_contact = @contact.contacts
-        @contacts_of_contact_count = @contact.contacts.count
-      else
-        @contact = Contact.new
-      end
-
-      @posts = current_user.photos_from(@person, max_time: max_time)
-
+      @contact = current_user.contact_for(@person) if user_signed_in?
+      @posts = Photo.visible(current_user, @person, :all, max_time)
       respond_to do |format|
-        format.all { render 'people/show' }
+        format.all do
+          gon.preloads[:person] = @presenter.as_json
+          gon.preloads[:photos_count] = Photo.visible(current_user, @person).count(:all)
+          render "people/show", layout: "with_header"
+        end
+        format.mobile { render "people/show" }
         format.json{ render_for_api :backbone, :json => @posts, :root => :photos }
       end
-
     else
       flash[:error] = I18n.t 'people.show.does_not_exist'
       redirect_to people_path
@@ -46,18 +44,7 @@ class PhotosController < ApplicationController
 
   def create
     rescuing_photo_errors do
-      if remotipart_submitted?
-        @photo = current_user.build_post(:photo, photo_params)
-        if @photo.save
-          respond_to do |format|
-            format.json { render :json => {"success" => true, "data" => @photo.as_api_response(:backbone)} }
-          end
-        else
-          respond_with @photo, :location => photos_path, :error => message
-        end
-      else
-        legacy_create
-      end
+      legacy_create
     end
   end
 
@@ -80,10 +67,10 @@ class PhotosController < ApplicationController
                             :status => 201}
         end
       else
-        render :nothing => true, :status => 422
+        head :unprocessable_entity
       end
     else
-      render :nothing => true, :status => 422
+      head :unprocessable_entity
     end
   end
 
@@ -94,7 +81,7 @@ class PhotosController < ApplicationController
       current_user.retract(photo)
 
       respond_to do |format|
-        format.json{ render :nothing => true, :status => 204 }
+        format.json { head :no_content }
         format.html do
           flash[:notice] = I18n.t 'photos.destroy.notice'
           if StatusMessage.find_by_guid(photo.status_message_guid)
@@ -106,34 +93,6 @@ class PhotosController < ApplicationController
       end
     else
       respond_with photo, :location => person_photos_path(current_user.person)
-    end
-  end
-
-  def edit
-    if @photo = current_user.photos.where(:id => params[:id]).first
-      respond_with @photo
-    else
-      redirect_to person_photos_path(current_user.person)
-    end
-  end
-
-  def update
-    photo = current_user.photos.where(:id => params[:id]).first
-    if photo
-      if current_user.update_post( photo, photo_params )
-        flash.now[:notice] = I18n.t 'photos.update.notice'
-        respond_to do |format|
-          format.js{ render :json => photo, :status => 200 }
-        end
-      else
-        flash.now[:error] = I18n.t 'photos.update.error'
-        respond_to do |format|
-          format.html{ redirect_to [:edit, photo] }
-          format.js{ render :status => 403 }
-        end
-      end
-    else
-      redirect_to person_photos_path(current_user.person)
     end
   end
 
@@ -167,30 +126,28 @@ class PhotosController < ApplicationController
   end
 
   def legacy_create
-    if params[:photo][:aspect_ids] == "all"
-      params[:photo][:aspect_ids] = current_user.aspects.collect { |x| x.id }
-    elsif params[:photo][:aspect_ids].is_a?(Hash)
-      params[:photo][:aspect_ids] = params[:photo][:aspect_ids].values
+    photo_params = params.require(:photo).permit(:pending, :set_profile_photo, aspect_ids: [])
+    if photo_params[:aspect_ids] == "all"
+      photo_params[:aspect_ids] = current_user.aspects.map(&:id)
+    elsif photo_params[:aspect_ids].is_a?(Hash)
+      photo_params[:aspect_ids] = params[:photo][:aspect_ids].values
     end
 
-    params[:photo][:user_file] = file_handler(params)
+    photo_params[:user_file] = file_handler(params)
 
-    @photo = current_user.build_post(:photo, params[:photo])
+    @photo = current_user.build_post(:photo, photo_params)
 
     if @photo.save
-      aspects = current_user.aspects_from_ids(params[:photo][:aspect_ids])
 
       unless @photo.pending
-        current_user.add_to_streams(@photo, aspects)
-        current_user.dispatch_post(@photo, :to => params[:photo][:aspect_ids])
+        unless @photo.public?
+          aspects = current_user.aspects_from_ids(photo_params[:aspect_ids])
+          current_user.add_to_streams(@photo, aspects)
+        end
+        current_user.dispatch_post(@photo, to: photo_params[:aspect_ids])
       end
 
-      if params[:photo][:set_profile_photo]
-        profile_params = {:image_url => @photo.url(:thumb_large),
-                          :image_url_medium => @photo.url(:thumb_medium),
-                          :image_url_small => @photo.url(:thumb_small)}
-        current_user.update_profile(profile_params)
-      end
+      current_user.update_profile(photo: @photo) if photo_params[:set_profile_photo]
 
       respond_to do |format|
         format.json{ render(:layout => false , :json => {"success" => true, "data" => @photo}.to_json )}

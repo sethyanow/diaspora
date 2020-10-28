@@ -1,5 +1,6 @@
-%footer
+%footer.footer
   .container
-    .branding-powered_by_diaspora
-    %ul#footer_nav
-      = render :partial =>'shared/links'
+    .powered-by-diaspora.pull-left
+      = link_to t("layouts.application.powered_by"), "https://diasporafoundation.org"
+    %ul#footer_nav.pull-right
+      = render partial: "shared/links"

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'oembed'
 require 'uri'
 
@@ -14,8 +16,6 @@ oembed_provider_list = [
   OEmbed::Providers::Instagram,
   OEmbed::Providers::Flickr
 ]
-
-OEmbed::Providers::Youtube.endpoint += "?scheme=https"
 
 oembed_providers = YAML.load_file(Rails.root.join("config", "oembed_providers.yml"))
 

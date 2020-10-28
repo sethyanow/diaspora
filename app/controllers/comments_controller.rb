@@ -1,73 +1,86 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
 class CommentsController < ApplicationController
-  include ApplicationHelper
-  before_filter :authenticate_user!, :except => [:index]
+  before_action :authenticate_user!, except: :index
 
-  respond_to :html,
-             :mobile,
-             :json
+  respond_to :html, :mobile, :json
 
   rescue_from ActiveRecord::RecordNotFound do
-    render :nothing => true, :status => 404
+    head :not_found
+  end
+
+  rescue_from Diaspora::NonPublic do
+    authenticate_user!
   end
 
   def create
-    post = current_user.find_visible_shareable_by_id(Post, params[:post_id])
-    @comment = current_user.comment!(post, params[:text]) if post
+    begin
+      comment = comment_service.create(params[:post_id], params[:text])
+    rescue ActiveRecord::RecordNotFound
+      render plain: I18n.t("comments.create.error"), status: 404
+      return
+    end
 
-    if @comment
-      respond_to do |format|
-        format.json{ render :json => CommentPresenter.new(@comment), :status => 201 }
-        format.html{ render :nothing => true, :status => 201 }
-        format.mobile{ render :partial => 'comment', :locals => {:post => @comment.post, :comment => @comment} }
-      end
+    if comment
+      respond_create_success(comment)
     else
-      render :nothing => true, :status => 422
+      render plain: I18n.t("comments.create.error"), status: 422
     end
   end
 
   def destroy
-    @comment = Comment.find(params[:id])
-    if current_user.owns?(@comment) || current_user.owns?(@comment.parent)
-      current_user.retract(@comment)
-      respond_to do |format|
-        format.js { render :nothing => true, :status => 204 }
-        format.json { render :nothing => true, :status => 204 }
-        format.mobile{ redirect_to :back }
-      end
+    if comment_service.destroy(params[:id])
+      respond_destroy_success
     else
-      respond_to do |format|
-        format.mobile { redirect_to :back }
-        format.any(:js, :json) {render :nothing => true, :status => 403}
-      end
+      respond_destroy_error
     end
   end
 
   def new
-    render :layout => false
+    respond_to do |format|
+      format.mobile { render layout: false }
+    end
   end
 
   def index
-    find_post
-    raise(ActiveRecord::RecordNotFound.new) unless @post
-
-    @comments = @post.comments.for_a_stream
+    comments = comment_service.find_for_post(params[:post_id])
     respond_with do |format|
-      format.json  { render :json => CommentPresenter.as_collection(@comments), :status => 200 }
-      format.mobile{render :layout => false}
+      format.json { render json: CommentPresenter.as_collection(comments), status: 200 }
+      format.mobile { render layout: false, locals: {comments: comments} }
     end
   end
 
   private
 
-  def find_post
-    if user_signed_in?
-      @post = current_user.find_visible_shareable_by_id(Post, params[:post_id])
-    else
-      @post = Post.find_by_id_and_public(params[:post_id], true)
+  def comment_service
+    @comment_service ||= CommentService.new(current_user)
+  end
+
+  def respond_create_success(comment)
+    respond_to do |format|
+      format.json { render json: CommentPresenter.new(comment), status: 201 }
+      format.html { head :created }
+      format.mobile { render partial: "comment", locals: {comment: comment} }
+    end
+  end
+
+  def respond_destroy_success
+    respond_to do |format|
+      format.mobile { redirect_back fallback_location: stream_path }
+      format.js { head :no_content }
+      format.json { head :no_content }
+    end
+  end
+
+  def respond_destroy_error
+    respond_to do |format|
+      format.mobile { redirect_back fallback_location: stream_path }
+      format.js { head :forbidden }
+      format.json { head :forbidden }
     end
   end
 end

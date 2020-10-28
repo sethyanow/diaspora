@@ -1,20 +1,46 @@
+# frozen_string_literal: true
+
 require_relative 'boot'
 
 require 'rails/all'
-Bundler.require(*Rails.groups(:assets => %w(development test))) if defined?(Bundler)
+
+require_relative "bundler_helper"
+
+# Require the gems listed in Gemfile, including any gems
+# you've limited to :test, :development, or :production.
+Bundler.require(*Rails.groups(BundlerHelper.database))
+
+# Do not dump the limit of boolean fields on MySQL,
+# since that generates a db/schema.rb that's incompatible
+# with PostgreSQL
+require 'active_record/connection_adapters/abstract_mysql_adapter'
+module ActiveRecord
+  module ConnectionAdapters
+    class Mysql2Adapter < AbstractMysqlAdapter
+      def prepare_column_options(column, *_)
+        super.tap {|spec|
+          spec.delete(:limit) if column.type == :boolean
+        }
+      end
+    end
+  end
+end
 
 # Load asset_sync early
 require_relative 'asset_sync'
 
 module Diaspora
   class Application < Rails::Application
+    # Initialize configuration defaults for originally generated Rails version.
+    config.load_defaults 5.1
+
     # Settings in config/environments/* take precedence over those specified here.
     # Application configuration should go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded.
 
     # Custom directories with classes and modules you want to be autoloadable.
-    config.autoload_paths      += %W{#{config.root}/app}
-    config.autoload_once_paths += %W{#{config.root}/lib}
+    config.autoload_paths      += %W[#{config.root}/app]
+    config.autoload_once_paths += %W[#{config.root}/lib]
 
     # Only load the plugins named here, in the order given (default is alphabetical).
     # :all can be used as a placeholder for all plugins not explicitly named.
@@ -34,9 +60,6 @@ module Diaspora
     # Configure the default encoding used in templates for Ruby 1.9.
     config.encoding = "utf-8"
 
-    # Configure sensitive parameters which will be filtered from the log file.
-    config.filter_parameters += [:password, :xml,:message, :text, :bio]
-
     # Enable escaping HTML in JSON.
     config.active_support.escape_html_entities_in_json = true
 
@@ -45,57 +68,44 @@ module Diaspora
     # like if you have constraints or database-specific column types
     # config.active_record.schema_format = :sql
 
-    # Enforce whitelist mode for mass assignment.
-    # This will create an empty whitelist of attributes available for mass-assignment for all models
-    # in your app. As such, your models will need to explicitly whitelist or blacklist accessible
-    # parameters by using an attr_accessible or attr_protected declaration.
-    #config.active_record.whitelist_attributes = false
-
     # Enable the asset pipeline
     config.assets.enabled = true
 
     # Speed up precompile by not loading the environment
     config.assets.initialize_on_precompile = false
 
-    # Precompile additional assets (application.js, application.css, and all non-JS/CSS are already added)
-    config.assets.precompile += %w{
-      aspect-contacts.js 
-      contact-list.js
-      home.js
-      ie.js
-      inbox.js
-      jquery.js
-      jquery_ujs.js
-      jquery.textchange.js
-      mailchimp.js
-      main.js
-      mobile.js
-      profile.js
-      people.js
-      profile.js
-      publisher.js
-      templates.js
-      validation.js
+    # Precompile additional assets.
+    # (application.js, application.css, and all non-JS/CSS in the app/assets are already added)
+    config.assets.precompile = %w[
+      color_themes/*/desktop.css
+      color_themes/*/mobile.css
+      manifest.js
+    ]
 
-      blueprint.css
-      bootstrap.css
-      bootstrap-complete.css
-      bootstrap-responsive.css
-      default.css
-      error_pages.css
-      admin.css
-      mobile/mobile.css
-      new-templates.css
-      rtl.css
-    }
-
-    # Version of your assets, change this if you want to expire all your assets
-    config.assets.version = '1.0'
+    # See lib/tasks/assets.rake: non_digest_assets
+    config.assets.non_digest_assets = %w(branding/logos/asterisk.png)
 
     # Configure generators values. Many other options are available, be sure to check the documentation.
     config.generators do |g|
       g.template_engine :haml
       g.test_framework  :rspec
     end
+
+    # Setup action mailer early
+    config.action_mailer.default_url_options = {
+      protocol: AppConfig.pod_uri.scheme,
+      host:     AppConfig.pod_uri.authority
+    }
+    config.action_mailer.asset_host = AppConfig.pod_uri.to_s
+
+    config.action_view.raise_on_missing_translations = true
+
+    config.middleware.use Rack::OAuth2::Server::Resource::Bearer, "OpenID Connect" do |req|
+      Api::OpenidConnect::OAuthAccessToken
+        .valid(Time.zone.now.utc).find_by(token: req.access_token) || req.invalid_token!
+    end
   end
 end
+
+Rails.application.routes.default_url_options[:host] = AppConfig.pod_uri.host
+Rails.application.routes.default_url_options[:port] = AppConfig.pod_uri.port

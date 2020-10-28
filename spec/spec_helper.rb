@@ -1,115 +1,161 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-prefork = proc do
-  # Loading more in this block will cause your tests to run faster. However,
-  # if you change any configuration or code from libraries loaded here, you'll
-  # need to restart spork for it take effect.
+ENV["RAILS_ENV"] ||= "test"
 
-  #require "rails/application"
-  #Spork.trap_method(Rails::Application::RoutesReloader, :reload!)
+require 'coveralls'
+Coveralls.wear!('rails')
 
-  ENV["RAILS_ENV"] ||= 'test'
-  require File.join(File.dirname(__FILE__), '..', 'config', 'environment')
-  require Rails.root.join('spec', 'helper_methods')
-  require Rails.root.join('spec', 'spec-doc')
-  require 'rspec/rails'
-  require 'webmock/rspec'
-  require 'factory_girl'
-  require 'sidekiq/testing'
+require File.join(File.dirname(__FILE__), "..", "config", "environment")
+require Rails.root.join("spec", "helper_methods")
+require "rspec/rails"
+require "webmock/rspec"
+require "factory_girl"
+require "sidekiq/testing"
+require "shoulda/matchers"
+require "diaspora_federation/schemas"
 
-  include HelperMethods
+include HelperMethods
 
-  Dir["#{File.dirname(__FILE__)}/shared_behaviors/**/*.rb"].each do |f|
-    require f
-  end
-
-  ProcessedImage.enable_processing = false
-  UnprocessedImage.enable_processing = false
-
-  def set_up_friends
-    [local_luke, local_leia, remote_raphael]
-  end
-
-  def alice
-    @alice ||= User.where(:username => 'alice').first
-  end
-
-  def bob
-    @bob ||= User.where(:username => 'bob').first
-  end
-
-  def eve
-    @eve ||= User.where(:username => 'eve').first
-  end
-
-  def local_luke
-    @local_luke ||= User.where(:username => 'luke').first
-  end
-
-  def local_leia
-    @local_leia ||= User.where(:username => 'leia').first
-  end
-
-  def remote_raphael
-    @remote_raphael ||= Person.where(:diaspora_handle => 'raphael@remote.net').first
-  end
-
-  def photo_fixture_name
-    @photo_fixture_name = File.join(File.dirname(__FILE__), 'fixtures', 'button.png')
-  end
-
-  # Force fixture rebuild
-  FileUtils.rm_f(Rails.root.join('tmp', 'fixture_builder.yml'))
-
-  # Requires supporting files with custom matchers and macros, etc,
-  # in ./support/ and its subdirectories.
-  fixture_builder_file = "#{File.dirname(__FILE__)}/support/fixture_builder.rb"
-  support_files = Dir["#{File.dirname(__FILE__)}/support/**/*.rb"] - [fixture_builder_file]
-  support_files.each {|f| require f }
-  require fixture_builder_file
-
-  RSpec.configure do |config|
-    config.include Devise::TestHelpers, :type => :controller
-    config.mock_with :rspec
-
-    config.render_views
-    config.use_transactional_fixtures = true
-
-    config.before(:each) do
-      I18n.locale = :en
-      stub_request(:post, "https://pubsubhubbub.appspot.com/")
-      disable_typhoeus
-      $process_queue = false
-      Postzord::Dispatcher::Public.any_instance.stub(:deliver_to_remote)
-      Postzord::Dispatcher::Private.any_instance.stub(:deliver_to_remote)
-    end
-
-
-
-    config.after(:all) do
-      `rm -rf #{Rails.root}/tmp/uploads/*`
-    end
-  end
+Dir["#{File.dirname(__FILE__)}/shared_behaviors/**/*.rb"].each do |f|
+  require f
 end
 
-begin
-  require 'spork'
-  #uncomment the following line to use spork with the debugger
-  #require 'spork/ext/ruby-debug'
+RSpec::Matchers.define_negated_matcher :remain, :change
 
-  Spork.prefork(&prefork)
-rescue LoadError
-  prefork.call
+ProcessedImage.enable_processing = false
+UnprocessedImage.enable_processing = false
+
+def alice
+  @alice ||= User.find_by(username: "alice")
 end
 
-# https://makandracards.com/makandra/950-speed-up-rspec-by-deferring-garbage-collection
+def bob
+  @bob ||= User.find_by(username: "bob")
+end
+
+def eve
+  @eve ||= User.find_by(username: "eve")
+end
+
+def local_luke
+  @local_luke ||= User.find_by(username: "luke")
+end
+
+def local_leia
+  @local_leia ||= User.find_by(username: "leia")
+end
+
+def remote_raphael
+  @remote_raphael ||= Person.find_by(diaspora_handle: "raphael@remote.net")
+end
+
+def peter
+  @peter ||= User.find_by(username: "peter")
+end
+
+def photo_fixture_name
+  @photo_fixture_name = File.join(File.dirname(__FILE__), "fixtures", "button.png")
+end
+
+def jwks_file_path
+  @jwks_file = File.join(File.dirname(__FILE__), "fixtures", "jwks.json")
+end
+
+def valid_client_assertion_path
+  @valid_client_assertion = File.join(File.dirname(__FILE__), "fixtures", "valid_client_assertion.txt")
+end
+
+def client_assertion_with_tampered_sig_path
+  @client_assertion_with_tampered_sig = File.join(File.dirname(__FILE__), "fixtures",
+                                                  "client_assertion_with_tampered_sig.txt")
+end
+
+def client_assertion_with_nonexistent_kid_path
+  @client_assertion_with_nonexistent_kid = File.join(File.dirname(__FILE__), "fixtures",
+                                                     "client_assertion_with_nonexistent_kid.txt")
+end
+
+def client_assertion_with_nonexistent_client_id_path
+  @client_assertion_with_nonexistent_client_id = File.join(File.dirname(__FILE__), "fixtures",
+                                                           "client_assertion_with_nonexistent_client_id.txt")
+end
+
+# Requires supporting files with custom matchers and macros, etc,
+# in ./support/ and its subdirectories.
+fixture_builder_file = "#{File.dirname(__FILE__)}/support/fixture_builder.rb"
+support_files = Dir["#{File.dirname(__FILE__)}/support/**/*.rb"] - [fixture_builder_file]
+support_files.each {|f| require f }
+require fixture_builder_file
+
 RSpec.configure do |config|
-  config.before(:all) do
-    DeferredGarbageCollection.start
+  config.fixture_path = Rails.root.join("spec", "fixtures")
+  config.global_fixtures = :all
+
+  config.include Devise::Test::ControllerHelpers, type: :controller
+  config.include Devise::Test::IntegrationHelpers, type: :request
+  config.mock_with :rspec
+
+  config.example_status_persistence_file_path = "tmp/rspec-persistance.txt"
+
+  config.render_views
+  config.use_transactional_fixtures = true
+  config.infer_spec_type_from_file_location!
+
+  config.before(:each) do
+    I18n.locale = :en
+    stub_request(:post, "https://pubsubhubbub.appspot.com/")
+    $process_queue = false
   end
+
+  config.expect_with :rspec do |expect_config|
+    expect_config.syntax = :expect
+  end
+
   config.after(:all) do
-    DeferredGarbageCollection.reconsider
+    `rm -rf #{Rails.root}/tmp/uploads/*`
+  end
+
+  # Reset overridden settings
+  config.after(:each) do
+    AppConfig.reset_dynamic!
+  end
+
+  # Reset test mails
+  config.after(:each) do
+    ActionMailer::Base.deliveries.clear
+  end
+
+  # Reset gon
+  config.after(:each) do
+    RequestStore.store[:gon].gon.clear unless RequestStore.store[:gon].nil?
+  end
+
+  config.include FactoryGirl::Syntax::Methods
+
+  config.include JSON::SchemaMatchers
+  config.json_schemas[:archive_schema] = "lib/schemas/archive-format.json"
+
+  JSON::Validator.add_schema(
+    JSON::Schema.new(
+      DiasporaFederation::Schemas.federation_entities,
+      Addressable::URI.parse(DiasporaFederation::Schemas::FEDERATION_ENTITIES_URI)
+    )
+  )
+end
+
+Shoulda::Matchers.configure do |config|
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
+end
+
+shared_context suppress_csrf_verification: :none do
+  before do
+    ActionController::Base.allow_forgery_protection = true
   end
 end

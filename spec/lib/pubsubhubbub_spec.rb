@@ -1,8 +1,8 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
-
-require 'spec_helper'
 
 describe Pubsubhubbub do
   describe '#publish' do
@@ -12,7 +12,7 @@ describe Pubsubhubbub do
       body = {'hub.url' => feed, 'hub.mode' => 'publish'}
 
       stub_request(:post, "http://hubzord.com/").to_return(:status => [202, 'you are awesome'])
-      Pubsubhubbub.new(hub).publish(feed).should be_success
+      expect(Pubsubhubbub.new(hub).publish(feed)).to be_success
     end
   end
 end

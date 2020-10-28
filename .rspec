@@ -3,4 +3,4 @@
 --color
 --tag ~performance
 --order random
---drb
+--require spec_helper

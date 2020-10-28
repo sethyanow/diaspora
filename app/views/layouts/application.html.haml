@@ -3,68 +3,40 @@
 -#   the COPYRIGHT file.
 
 !!!
-%html{:lang => I18n.locale.to_s, :dir => (rtl?) ? 'rtl' : 'ltr'}
-  %head
-    %title
-      = page_title yield(:page_title)
+%html{lang: I18n.locale.to_s, dir: (rtl? ? "rtl" : "ltr")}
+  %head{prefix: og_prefix}
+    %meta{name: "viewport", content: "width=device-width, initial-scale=1"}/
 
-    %meta{:charset => 'utf-8'}/
-    %meta{"http-equiv"=>"Content-Type", :content=>"text/html; charset=utf-8"}/
-    %meta{:name => "description", :content => "diaspora*"}/
-    %meta{:name => "author", :content => "Diaspora, Inc."}/
-    %meta{:property => "og:site_name", :content => "#{AppConfig.settings.pod_name}"}/
-
-    %link{:rel => 'shortcut icon', :href => "#{image_path('favicon.png')}" }
-    %link{:rel => 'apple-touch-icon', :href => "#{image_path('apple-touch-icon.png')}"}
-
-    = chartbeat_head_block
-    = include_mixpanel
-
-    = include_base_css_framework(@css_framework)
-    - if @css_framework == :bootstrap && !@include_application_css
-      = stylesheet_link_tag :default, 'new-templates', :media => 'all'
-    - else
-      = stylesheet_link_tag 'application', 'default'
-
-    - if rtl?
-      = stylesheet_link_tag :rtl, :media => 'all'
-
-    = old_browser_js_support
-    <!--[if IE]>
-    = javascript_include_tag :ie
-    <![endif]-->
-
-    = jquery_include_tag
-
-    - unless @landing_page
-      = javascript_include_tag :main, :templates
+    - content_for :javascript do
+      = javascript_include_tag :main
       = load_javascript_locales
 
-    = set_asset_host
+    = include_color_theme
+    = render "layouts/head"
     = translation_missing_warnings
-    = current_user_atom_tag
 
-    = yield(:head)
-    = csrf_meta_tag
-
-    - if @post.present?
-      %link{:rel => 'alternate', :type => "application/json+oembed", :href => "#{oembed_url(:url => post_url(@post))}"}
-      = og_page_specific_tags(@post)
-
-    = include_gon(:camel_case => true)
-
-  %body
-    = flash_messages
-
+  %body{class: "page-#{controller_name} action-#{action_name}"}
     = yield :before_content
 
-    - if content_for?(:container_content)
-      .container
-        =  yield(:container_content)
-    - else
-      = content_for?(:content) ? yield(:content) : yield
+    %noscript
+      .noscript
+        %h3= t("error_messages.need_javascript")
+
+    = content_for?(:content) ? yield(:content) : yield
 
     = yield :after_content
 
-    = include_chartbeat
-    = include_mixpanel_guid
+    .blueimp-gallery.blueimp-gallery-controls#blueimp-gallery
+      .slides
+      %a.prev
+        .entypo-chevron-small-left
+      %a.next
+        .entypo-chevron-small-right
+      %a.close
+        .entypo-cross
+      %a.play-pause
+      %ol.indicator
+
+    #flash-container= flash_messages
+
+    %a.entypo-chevron-up.back-to-top#back-to-top{title: t("layouts.application.back_to_top"), href: "#"}

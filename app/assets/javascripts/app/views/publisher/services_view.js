@@ -1,3 +1,5 @@
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
+
 /*   Copyright (c) 2010-2012, Diaspora Inc.  This file is
  *   licensed under the Affero General Public License version 3 or later.  See
  *   the COPYRIGHT file.
@@ -35,7 +37,7 @@ app.views.PublisherServices = Backbone.View.extend({
   // keep track of character count
   _createCounter: function() {
     // remove any obsolete counters
-    this.input.siblings('.counter').remove();
+    $("#publisher .counter").remove();
 
     // create new counter
     var min = 40000;
@@ -45,7 +47,13 @@ app.views.PublisherServices = Backbone.View.extend({
         var num = parseInt($(value).attr('maxchar'));
         if (min > num) { min = num; }
       });
-      this.input.charCount({allowed: min, warning: min/10 });
+      var counter = $("<div class='counter pull-right'></div>");
+      $("#publisher-images").after(counter);
+      this.input.charCount({
+        allowed: min,
+        warning: min / 10,
+        counter: counter
+      });
     }
   },
 
@@ -61,3 +69,5 @@ app.views.PublisherServices = Backbone.View.extend({
     }
   }
 });
+// @license-end
+

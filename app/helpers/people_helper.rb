@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
@@ -14,25 +16,27 @@ module PeopleHelper
       end
     end
   end
-  
+
   def birthday_format(bday)
-    if bday.year == 1000
-      I18n.l bday, :format => I18n.t('date.formats.birthday')
+    if bday.year <= 1004
+      I18n.l bday, format: I18n.t("date.formats.birthday")
     else
-      I18n.l bday, :format => I18n.t('date.formats.birthday_with_year')
+      I18n.l bday, format: I18n.t("date.formats.birthday_with_year")
     end
   end
 
   def person_link(person, opts={})
-    opts[:class] ||= ""
-    opts[:class] << " self" if defined?(user_signed_in?) && user_signed_in? && current_user.person == person
-    opts[:class] << " hovercardable" if defined?(user_signed_in?) && user_signed_in? && current_user.person != person
+    css_class = person_link_class(person, opts[:class])
     remote_or_hovercard_link = Rails.application.routes.url_helpers.person_path(person).html_safe
-    "<a data-hovercard='#{remote_or_hovercard_link}' href='#{remote_or_hovercard_link}' class='#{opts[:class]}' #{ ("target=" + opts[:target]) if opts[:target]}>#{h(person.name)}</a>".html_safe
+    "<a data-hovercard='#{remote_or_hovercard_link}' href='#{remote_or_hovercard_link}' class='#{css_class}'>"\
+      "#{html_escape_once(opts[:display_name] || person.name)}</a>"\
+      .html_safe
   end
 
   def person_image_tag(person, size = :thumb_small)
-    image_tag(person.profile.image_url(size), :alt => person.name, :class => 'avatar', :title => person.name, 'data-person_id' => person.id)
+    return "" if person.nil? || person.profile.nil?
+    image_tag(person.profile.image_url(size), alt: person.name, class: "avatar img-responsive center-block",
+              title: person.name, "data-person_id" => person.id)
   end
 
   def person_image_link(person, opts={})
@@ -40,18 +44,12 @@ module PeopleHelper
     if opts[:to] == :photos
       link_to person_image_tag(person, opts[:size]), person_photos_path(person)
     else
-      opts[:class] ||= ""
-      opts[:class] << " self" if defined?(user_signed_in?) && user_signed_in? && current_user.person == person
-      opts[:class] << " hovercardable" if defined?(user_signed_in?) && user_signed_in? && current_user.person != person
+      css_class = person_link_class(person, opts[:class])
       remote_or_hovercard_link = Rails.application.routes.url_helpers.person_path(person).html_safe
-      "<a href='#{remote_or_hovercard_link}' class='#{opts[:class]}' #{ ("target=" + opts[:target]) if opts[:target]}>
+      "<a href='#{remote_or_hovercard_link}' class='#{css_class}' #{('target=' + opts[:target]) if opts[:target]}>
       #{person_image_tag(person, opts[:size])}
       </a>".html_safe
     end
-  end
-
-  def person_href(person, opts={})
-    "href=\"#{local_or_remote_person_path(person, opts)}\"".html_safe
   end
 
   # Rails.application.routes.url_helpers is needed since this is indirectly called from a model
@@ -60,7 +58,7 @@ module PeopleHelper
     absolute = opts.delete(:absolute)
 
     if person.local?
-      username = person.diaspora_handle.split('@')[0]
+      username = person.username
       unless username.include?('.')
         opts.merge!(:username => username)
         if absolute
@@ -78,29 +76,13 @@ module PeopleHelper
     end
   end
 
-  def sharing_message(person, contact)
-    if contact.sharing?
-      content_tag(:div, :class => 'sharing_message_container', :title => I18n.t('people.helper.is_sharing', :name => person.name)) do
-        content_tag(:div, nil, :class => 'icons-check_yes_ok', :id => 'sharing_message')
-      end
-    else
-      content_tag(:div, :class => 'sharing_message_container', :title => I18n.t('people.helper.is_not_sharing', :name => person.name)) do
-        content_tag(:div, nil, :class => 'icons-circle', :id => 'sharing_message')
-      end
-    end
-  end
+  private
 
-  def profile_buttons_class(contact, block)
-    if block.present?
-      'blocked'
-    elsif contact.mutual?
-      'mutual'
-    elsif contact.sharing?
-      'only_sharing'
-    elsif contact.receiving?
-      'receiving'
-    else
-      'not_sharing'
-    end
+  def person_link_class(person, css_class)
+    return css_class unless defined?(user_signed_in?) && user_signed_in?
+
+    return "#{css_class} self" if current_user.person == person
+
+    "#{css_class} hovercardable"
   end
 end

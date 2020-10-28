@@ -1,53 +1,70 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-class User < ActiveRecord::Base
-  include Encryptor::Private
+class User < ApplicationRecord
+  include AuthenticationToken
   include Connecting
   include Querying
   include SocialActions
 
   apply_simple_captcha :message => I18n.t('simple_captcha.message.failed'), :add_to_base => true
 
-  scope :logged_in_since, lambda { |time| where('last_seen > ?', time) }
-  scope :monthly_actives, lambda { |time = Time.now| logged_in_since(time - 1.month) }
-  scope :daily_actives, lambda { |time = Time.now| logged_in_since(time - 1.day) }
-  scope :yearly_actives, lambda { |time = Time.now| logged_in_since(time - 1.year) }
-  scope :halfyear_actives, lambda { |time = Time.now| logged_in_since(time - 6.month) }
+  scope :logged_in_since, ->(time) { where('last_seen > ?', time) }
+  scope :monthly_actives, ->(time = Time.now) { logged_in_since(time - 1.month) }
+  scope :daily_actives, ->(time = Time.now) { logged_in_since(time - 1.day) }
+  scope :yearly_actives, ->(time = Time.now) { logged_in_since(time - 1.year) }
+  scope :halfyear_actives, ->(time = Time.now) { logged_in_since(time - 6.month) }
+  scope :active, -> { joins(:person).where(people: {closed_account: false}) }
 
-  devise :database_authenticatable, :registerable,
+  attr_encrypted :otp_secret, if: false, prefix: "plain_"
+
+  devise :two_factor_authenticatable,
+         :two_factor_backupable,
+         otp_backup_code_length:     16,
+         otp_number_of_backup_codes: 10
+
+  devise :registerable,
          :recoverable, :rememberable, :trackable, :validatable,
          :lockable, :lastseenable, :lock_strategy => :none, :unlock_strategy => :none
 
   before_validation :strip_and_downcase_username
   before_validation :set_current_language, :on => :create
+  before_validation :set_default_color_theme, on: :create
 
   validates :username, :presence => true, :uniqueness => true
   validates_format_of :username, :with => /\A[A-Za-z0-9_]+\z/
   validates_length_of :username, :maximum => 32
   validates_exclusion_of :username, :in => AppConfig.settings.username_blacklist
   validates_inclusion_of :language, :in => AVAILABLE_LANGUAGE_CODES
+  validates :color_theme, inclusion: {in: AVAILABLE_COLOR_THEMES}, allow_blank: true
   validates_format_of :unconfirmed_email, :with  => Devise.email_regexp, :allow_blank => true
 
-  validates_presence_of :person, :unless => proc {|user| user.invitation_token.present?}
+  validate :unconfirmed_email_quasiuniqueness
+
+  validates :person, presence: true
   validates_associated :person
   validate :no_person_with_same_username
 
   serialize :hidden_shareables, Hash
+  serialize :otp_backup_codes, Array
 
-  has_one :person, :foreign_key => :owner_id
+  has_one :person, inverse_of: :owner, foreign_key: :owner_id
+  has_one :profile, through: :person
+
   delegate :guid, :public_key, :posts, :photos, :owns?, :image_url,
-           :diaspora_handle, :name, :public_url, :profile, :url,
-           :first_name, :last_name, :gender, :participations, to: :person
+           :diaspora_handle, :name, :atom_url, :profile_url, :profile, :url,
+           :first_name, :last_name, :full_name, :gender, :participations, to: :person
   delegate :id, :guid, to: :person, prefix: true
 
-  has_many :invitations_from_me, :class_name => 'Invitation', :foreign_key => :sender_id
-  has_many :invitations_to_me, :class_name => 'Invitation', :foreign_key => :recipient_id
-  has_many :aspects, :order => 'order_id ASC'
+  has_many :aspects, -> { order('order_id ASC') }
 
-  belongs_to  :auto_follow_back_aspect, :class_name => 'Aspect'
-  belongs_to :invited_by, :class_name => 'User'
+  belongs_to :auto_follow_back_aspect, class_name: "Aspect", optional: true
+  belongs_to :invited_by, class_name: "User", optional: true
+
+  has_many :invited_users, class_name: "User", inverse_of: :invited_by, foreign_key: :invited_by_id
 
   has_many :aspect_memberships, :through => :aspects
 
@@ -59,20 +76,31 @@ class User < ActiveRecord::Base
   has_many :user_preferences
 
   has_many :tag_followings
-  has_many :followed_tags, :through => :tag_followings, :source => :tag, :order => 'tags.name'
+  has_many :followed_tags, -> { order('tags.name') }, :through => :tag_followings, :source => :tag
 
   has_many :blocks
   has_many :ignored_people, :through => :blocks, :source => :person
 
-  has_many :conversation_visibilities, through: :person, order: 'updated_at DESC'
-  has_many :conversations, through: :conversation_visibilities, order: 'updated_at DESC'
+  has_many :conversation_visibilities, through: :person
+  has_many :conversations, through: :conversation_visibilities
 
   has_many :notifications, :foreign_key => :recipient_id
 
   has_many :reports
 
-  before_save :guard_unconfirmed_email,
-              :save_person!
+  has_many :pairwise_pseudonymous_identifiers, class_name: "Api::OpenidConnect::PairwisePseudonymousIdentifier"
+  has_many :authorizations, class_name: "Api::OpenidConnect::Authorization"
+  has_many :o_auth_applications, through: :authorizations, class_name: "Api::OpenidConnect::OAuthApplication"
+
+  has_many :share_visibilities
+
+  before_save :guard_unconfirmed_email
+
+  after_save :remove_invalid_unconfirmed_emails
+
+  before_destroy do
+    raise "Never destroy users!"
+  end
 
   def self.all_sharing_with_person(person)
     User.joins(:contacts).where(:contacts => {:person_id => person.id})
@@ -83,26 +111,16 @@ class User < ActiveRecord::Base
   end
 
   def unread_message_count
-    ConversationVisibility.sum(:unread, :conditions => "person_id = #{self.person.id}")
-  end
-
-  #@deprecated
-  def ugly_accept_invitation_code
-    begin
-      self.invitations_to_me.first.sender.invitation_code
-    rescue Exception => e
-      nil
-    end
+    ConversationVisibility.where(person_id: self.person_id).sum(:unread)
   end
 
   def process_invite_acceptence(invite)
     self.invited_by = invite.user
-    invite.use!
+    invite.use! unless AppConfig.settings.enable_registrations?
   end
 
-
   def invitation_code
-    InvitationCode.find_or_create_by_user_id(self.id)
+    InvitationCode.find_or_create_by(user_id: self.id)
   end
 
   def hidden_shareables
@@ -163,16 +181,16 @@ class User < ActiveRecord::Base
 
   def update_user_preferences(pref_hash)
     if self.disable_mail
-      UserPreference::VALID_EMAIL_TYPES.each{|x| self.user_preferences.find_or_create_by_email_type(x)}
+      UserPreference::VALID_EMAIL_TYPES.each{|x| self.user_preferences.find_or_create_by(email_type: x)}
       self.disable_mail = false
       self.save
     end
 
     pref_hash.keys.each do |key|
       if pref_hash[key] == 'true'
-        self.user_preferences.find_or_create_by_email_type(key)
+        self.user_preferences.find_or_create_by(email_type: key)
       else
-        block = self.user_preferences.where(:email_type => key).first
+        block = user_preferences.find_by(email_type: key)
         if block
           block.destroy
         end
@@ -195,6 +213,10 @@ class User < ActiveRecord::Base
     self.language = I18n.locale.to_s if self.language.blank?
   end
 
+  def set_default_color_theme
+    self.color_theme ||= AppConfig.settings.default_color_theme
+  end
+
   # This override allows a user to enter either their email address or their username into the username field.
   # @return [User] The user that matches the username/email condition.
   # @return [nil] if no user matches that condition.
@@ -213,24 +235,17 @@ class User < ActiveRecord::Base
     save
   end
 
-  ######### Aspects ######################
-  def add_contact_to_aspect(contact, aspect)
-    return true if AspectMembership.exists?(:contact_id => contact.id, :aspect_id => aspect.id)
-    contact.aspect_memberships.create!(:aspect => aspect)
-  end
-
   ######## Posting ########
   def build_post(class_name, opts={})
-    opts[:author] = self.person
-    opts[:diaspora_handle] = opts[:author].diaspora_handle
+    opts[:author] = person
 
     model_class = class_name.to_s.camelize.constantize
     model_class.diaspora_initialize(opts)
   end
 
   def dispatch_post(post, opts={})
-    FEDERATION_LOGGER.info("user:#{self.id} dispatching #{post.class}:#{post.guid}")
-    Postzord::Dispatcher.defer_build_and_post(self, post, opts)
+    logger.info "user:#{id} dispatching #{post.class}:#{post.guid}"
+    Diaspora::Federation::Dispatcher.defer_dispatch(self, post, opts)
   end
 
   def update_post(post, post_hash={})
@@ -238,12 +253,6 @@ class User < ActiveRecord::Base
       post.update_attributes(post_hash)
       self.dispatch_post(post)
     end
-  end
-
-  def notify_if_mentioned(post)
-    return unless self.contact_for(post.author) && post.respond_to?(:mentions?)
-
-    post.notify_person(self.person) if post.mentions? self.person
   end
 
   def add_to_streams(post, aspects_to_insert)
@@ -256,12 +265,23 @@ class User < ActiveRecord::Base
     if aspect_ids == "all" || aspect_ids == :all
       self.aspects
     else
-      aspects.where(:id => aspect_ids)
+      aspects.where(:id => aspect_ids).to_a
     end
   end
 
-  def salmon(post)
-    Salmon::EncryptedSlap.create_by_user_and_activity(self, post.to_diaspora_xml)
+  def post_default_aspects
+    if post_default_public
+      ["public"]
+    else
+      aspects.where(post_default: true).to_a
+    end
+  end
+
+  def update_post_default_aspects(post_default_aspect_ids)
+    aspects.each do |aspect|
+      enable = post_default_aspect_ids.include?(aspect.id.to_s)
+      aspect.update_attribute(:post_default, enable)
+    end
   end
 
   # Check whether the user has liked a post.
@@ -283,47 +303,73 @@ class User < ActiveRecord::Base
   # @return [Like]
   def like_for(target)
     if target.likes.loaded?
-      return target.likes.detect{ |like| like.author_id == self.person.id }
+      target.likes.find {|like| like.author_id == person.id }
     else
-      return Like.where(:author_id => self.person.id, :target_type => target.class.base_class.to_s, :target_id => target.id).first
+      Like.find_by(author_id: person.id, target_type: target.class.base_class.to_s, target_id: target.id)
     end
+  end
+
+  ######### Data export ##################
+  mount_uploader :export, ExportedUser
+
+  def queue_export
+    update exporting: true, export: nil, exported_at: nil
+    Workers::ExportUser.perform_async(id)
+  end
+
+  def perform_export!
+    export = Tempfile.new([username, ".json.gz"], encoding: "ascii-8bit")
+    export.write(compressed_export) && export.close
+    if export.present?
+      update exporting: false, export: export, exported_at: Time.zone.now
+    else
+      update exporting: false
+    end
+  rescue => error
+    logger.error "Unexpected error while exporting user '#{username}': #{error.class}: #{error.message}\n" \
+                 "#{error.backtrace.first(15).join("\n")}"
+    update exporting: false
+  end
+
+  def compressed_export
+    ActiveSupport::Gzip.compress Diaspora::Exporter.new(self).execute
+  end
+
+  ######### Photos export ##################
+  mount_uploader :exported_photos_file, ExportedPhotos
+
+  def queue_export_photos
+    update exporting_photos: true, exported_photos_file: nil, exported_photos_at: nil
+    Workers::ExportPhotos.perform_async(id)
+  end
+
+  def perform_export_photos!
+    PhotoExporter.new(self).perform
+  rescue => error
+    logger.error "Unexpected error while exporting photos for '#{username}': #{error.class}: #{error.message}\n" \
+                 "#{error.backtrace.first(15).join("\n")}"
+    update exporting_photos: false
   end
 
   ######### Mailer #######################
   def mail(job, *args)
+    return unless job.present?
     pref = job.to_s.gsub('Workers::Mail::', '').underscore
     if(self.disable_mail == false && !self.user_preferences.exists?(:email_type => pref))
       job.perform_async(*args)
     end
   end
 
-  def mail_confirm_email
-    return false if unconfirmed_email.blank?
+  def send_confirm_email
+    return if unconfirmed_email.blank?
     Workers::Mail::ConfirmEmail.perform_async(id)
-    true
   end
 
   ######### Posts and Such ###############
-  def retract(target, opts={})
-    if target.respond_to?(:relayable?) && target.relayable?
-      retraction = RelayableRetraction.build(self, target)
-    elsif target.is_a? Post
-      retraction = SignedRetraction.build(self, target)
-    else
-      retraction = Retraction.for(target)
-    end
-
-   if target.is_a?(Post)
-     opts[:additional_subscribers] = target.resharers
-     opts[:services] = self.services
-   end
-
-    mailman = Postzord::Dispatcher.build(self, retraction, opts)
-    mailman.post
-
-    retraction.perform(self)
-
-    retraction
+  def retract(target)
+    retraction = Retraction.for(target)
+    retraction.defer_dispatch(self)
+    retraction.perform
   end
 
   ########### Profile ######################
@@ -349,13 +395,17 @@ class User < ActiveRecord::Base
     update_profile( self.profile.from_omniauth_hash( user_info ) )
   end
 
-  def deliver_profile_update
-    Postzord::Dispatcher.build(self, profile).post
+  def deliver_profile_update(opts={})
+    Diaspora::Federation::Dispatcher.defer_dispatch(self, profile, opts)
+  end
+
+  def basic_profile_present?
+    tag_followings.any? || profile[:image_url]
   end
 
   ###Helpers############
   def self.build(opts = {})
-    u = User.new(opts.except(:person))
+    u = User.new(opts.except(:person, :id))
     u.setup(opts)
     u
   end
@@ -365,17 +415,18 @@ class User < ActiveRecord::Base
     self.email = opts[:email]
     self.language = opts[:language]
     self.language ||= I18n.locale.to_s
+    self.color_theme = opts[:color_theme]
+    self.color_theme ||= AppConfig.settings.default_color_theme
     self.valid?
     errors = self.errors
     errors.delete :person
     return if errors.size > 0
-    self.set_person(Person.new(opts[:person] || {} ))
+    self.set_person(Person.new((opts[:person] || {}).except(:id)))
     self.generate_keys
     self
   end
 
   def set_person(person)
-    person.url = AppConfig.pod_uri.to_s
     person.diaspora_handle = "#{self.username}#{User.diaspora_id_host}"
     self.person = person
   end
@@ -391,10 +442,24 @@ class User < ActiveRecord::Base
     aq = self.aspects.create(:name => I18n.t('aspects.seed.acquaintances'))
 
     if AppConfig.settings.autofollow_on_join?
-      default_account = Webfinger.new(AppConfig.settings.autofollow_on_join_user).fetch
+      default_account = Person.find_or_fetch_by_identifier(AppConfig.settings.autofollow_on_join_user)
       self.share_with(default_account, aq) if default_account
     end
     aq
+  end
+
+  def send_welcome_message
+    return unless AppConfig.settings.welcome_message.enabled? && AppConfig.admins.account?
+    sender_username = AppConfig.admins.account.get
+    sender = User.find_by(username: sender_username)
+    return if sender.nil?
+    conversation = sender.build_conversation(
+      participant_ids: [sender.person.id, person.id],
+      subject:         AppConfig.settings.welcome_message.subject.get,
+      message:         {text: AppConfig.settings.welcome_message.text.get % {username: username}}
+    )
+
+    Diaspora::Federation::Dispatcher.build(sender, conversation).dispatch if conversation.save
   end
 
   def encryption_key
@@ -403,6 +468,22 @@ class User < ActiveRecord::Base
 
   def admin?
     Role.is_admin?(self.person)
+  end
+
+  def moderator?
+    Role.moderator?(person)
+  end
+
+  def moderator_only?
+    Role.moderator_only?(person)
+  end
+
+  def spotlight?
+    Role.spotlight?(person)
+  end
+
+  def podmin_account?
+    username == AppConfig.admins.account
   end
 
   def mine?(target)
@@ -414,34 +495,39 @@ class User < ActiveRecord::Base
   end
 
 
+  # Ensure that the unconfirmed email isn't already someone's email
+  def unconfirmed_email_quasiuniqueness
+    if User.exists?(["id != ? AND email = ?", id, unconfirmed_email])
+      errors.add(:unconfirmed_email, I18n.t("errors.messages.taken"))
+    end
+  end
+
   def guard_unconfirmed_email
     self.unconfirmed_email = nil if unconfirmed_email.blank? || unconfirmed_email == email
 
-    if unconfirmed_email_changed?
-      self.confirm_email_token = unconfirmed_email ? SecureRandom.hex(15) : nil
-    end
+    return unless will_save_change_to_unconfirmed_email?
+
+    self.confirm_email_token = unconfirmed_email ? SecureRandom.hex(15) : nil
+  end
+
+  # Whenever email is set, clear all unconfirmed emails which match
+  def remove_invalid_unconfirmed_emails
+    return unless saved_change_to_email?
+    # rubocop:disable Rails/SkipsModelValidations
+    User.where(unconfirmed_email: email).update_all(unconfirmed_email: nil, confirm_email_token: nil)
+    # rubocop:enable Rails/SkipsModelValidations
   end
 
   # Generate public/private keys for User and associated Person
   def generate_keys
-    key_size = (Rails.env == 'test' ? 512 : 4096)
+    key_size = (Rails.env == "test" ? 512 : 4096)
 
-    self.serialized_private_key = OpenSSL::PKey::RSA::generate(key_size).to_s if self.serialized_private_key.blank?
+    self.serialized_private_key = OpenSSL::PKey::RSA.generate(key_size).to_s if serialized_private_key.blank?
 
     if self.person && self.person.serialized_public_key.blank?
       self.person.serialized_public_key = OpenSSL::PKey::RSA.new(self.serialized_private_key).public_key.to_s
     end
   end
-
-  # Sometimes we access the person in a strange way and need to do this
-  # @note we should make this method depricated.
-  #
-  # @return [Person]
-  def save_person!
-    self.person.save if self.person && self.person.changed?
-    self.person
-  end
-
 
   def no_person_with_same_username
     diaspora_id = "#{self.username}#{User.diaspora_id_host}"
@@ -453,7 +539,11 @@ class User < ActiveRecord::Base
   def close_account!
     self.person.lock_access!
     self.lock_access!
-    AccountDeletion.create(:person => self.person)
+    AccountDeletion.create(person: person)
+  end
+
+  def closed_account?
+    self.person.closed_account
   end
 
   def clear_account!
@@ -461,10 +551,14 @@ class User < ActiveRecord::Base
       self[field] = nil
     end
     [:getting_started,
-     :disable_mail,
-     :show_community_spotlight_in_stream].each do |field|
+     :show_community_spotlight_in_stream,
+     :post_default_public].each do |field|
       self[field] = false
     end
+    self.remove_export = true
+    self.remove_exported_photos_file = true
+    self[:disable_mail] = true
+    self[:strip_exif] = true
     self[:email] = "deletedaccount_#{self[:id]}@example.org"
 
     random_password = SecureRandom.hex(20)
@@ -480,13 +574,34 @@ class User < ActiveRecord::Base
       save
     end
   end
-  
+
+  def flag_for_removal(remove_after)
+    # flag inactive user for future removal
+    if AppConfig.settings.maintenance.remove_old_users.enable?
+      self.remove_after = remove_after
+      self.save
+    end
+  end
+
+  def after_database_authentication
+    # remove any possible remove_after timestamp flag set by maintenance.remove_old_users
+    unless self.remove_after.nil?
+      self.remove_after = nil
+      self.save
+    end
+  end
+
+  def remember_me
+    true
+  end
+
   private
+
   def clearable_fields
-    self.attributes.keys - ["id", "username", "encrypted_password",
-                            "created_at", "updated_at", "locked_at",
-                            "serialized_private_key", "getting_started",
-                            "disable_mail", "show_community_spotlight_in_stream",
-                            "email"]
+    attributes.keys - %w(id username encrypted_password created_at updated_at locked_at
+                         serialized_private_key getting_started
+                         disable_mail show_community_spotlight_in_stream
+                         strip_exif email remove_after export exporting
+                         exported_photos_file exporting_photos)
   end
 end

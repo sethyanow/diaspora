@@ -10,11 +10,13 @@ available:
   da: "Dansk"
   de: "Deutsch"
   de_formal: "Deutsch (Sie)"
+  de-CH: "Deutsch (Schwiizerdütsch)"
   el: "Ελληνικά"
   en: "English"
   en_1337: "3n6l15h (English 1337)"
   en_pirate: "English (Pirate)"
   en_shaw: "𐑦𐑙𐑤𐑦𐑖"
+  en_valspeak: "English (Valley Girl)"
   eo: "Esperanto"
   es: "Castellano"
   es-AR: "Castellano - Argentina"
@@ -29,15 +31,19 @@ available:
   fr: "Français"
   fy: "Frysk"
   ga: "Gaeilge"
+  gd: "Gàidhlig"
   gl: "Galego"
   he: "עברית"
   hu: "magyar nyelv"
-  hy: "հայերեն"
+  hye: "արեւելահայերեն"
+  hye-classical: "արեւելահայերէն"
+  hyw: "արեւմտահայերէն"
   ia: "Interlingua"
   id: "Bahasa Indonesia"
   is: "íslenska"
   it: "Italiano"
   ja: "日本語"
+  ja-KS: "日本語(関西)"
   ka: "ქართული"
   ko: "한국어"
   lt: "Lietuviškai"
@@ -45,18 +51,21 @@ available:
   ml: "മലയാളം"
   ms: "بهاس ملايو‎"
   nb: "Norske"
+  nds: "Niederdeutsch"
   nl: "Nederlands"
   nn: "Nynorsk"
+  oc: "Occitan"
   pa: "ਪੰਜਾਬੀ"
   pl: "polski"
   pt-PT: "Português (Portugal)"
   pt-BR: "Português (Brasil)"
   ro: "Română"
   ru: "Русский"
+  sc: "Sardu"
   si: "සිංහල"
   sk: "Slovenčina"
   sl: "Slovenščina"
-  sq: "gjuha shqipe"
+  sq: "Shqip"
   sr: "српски језик"
   sv: "Svenska"
   te: "తెలుగు"
@@ -86,6 +95,10 @@ fallbacks:
     - "en"
     - "en-GB"
     - "en-US"
+  en_valspeak:
+    - "en"
+    - "en-GB"
+    - "en-US"
   sv:
     - "sv-SE"
   he:
@@ -109,12 +122,26 @@ fallbacks:
     - "ur"
   de_formal:
     - "de"
+  de-CH:
+    - "de"
+  nds:
+    - "de"
   art_nvi:
     - "art-nvi"
   pt-BR:
     - "pt"
   pt-PT:
     - "pt"
+  oc:
+    - "it"
+  sc:
+    - "it"
+  ja-KS:
+    - "ja"
+  hye-classical:
+    - "hye"
+  hyw:
+    - "hye"
 
 rtl:
   - "ar"
