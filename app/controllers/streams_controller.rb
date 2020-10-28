@@ -1,11 +1,14 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
 class StreamsController < ApplicationController
-  before_action :authenticate_user!
+  before_action :authenticate_user!, except: :public
   before_action :save_selected_aspects, :only => :aspects
-  before_action :redirect_unless_admin, :only => :public
+
+  layout proc { request.format == :mobile ? "application" : "with_header" }
 
   respond_to :html,
              :mobile,
@@ -27,7 +30,13 @@ class StreamsController < ApplicationController
   end
 
   def multi
-      stream_responder(Stream::Multi)
+    if current_user.getting_started
+      gon.preloads[:getting_started] = true
+      inviter = current_user.invited_by.try(:person)
+      gon.preloads[:mentioned_person] = {name: inviter.name, handle: inviter.diaspora_handle} if inviter
+    end
+
+    stream_responder(Stream::Multi)
   end
 
   def commented
@@ -50,6 +59,7 @@ class StreamsController < ApplicationController
   private
 
   def stream_responder(stream_klass=nil)
+
     if stream_klass.present?
       @stream ||= stream_klass.new(current_user, :max_time => max_time)
     end

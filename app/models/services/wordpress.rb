@@ -1,30 +1,33 @@
-class Services::Wordpress < Service
-  MAX_CHARACTERS = 1000
+# frozen_string_literal: true
 
-  attr_accessor :username, :password, :host, :path
+module Services
+  class Wordpress < Service
+    MAX_CHARACTERS = 1000
 
-  # uid = blog_id
+    attr_accessor :username, :password, :host, :path
 
-  def provider
-    "wordpress"
-  end
+    # uid = blog_id
 
-  def post post, url=''
-    res = Faraday.new(url: "https://public-api.wordpress.com").post do |req|
-      req.url "/rest/v1/sites/#{self.uid}/posts/new"
-      req.body = post_body(post).to_json
-      req.headers['Authorization'] = "Bearer #{self.access_token}"
-      req.headers['Content-Type'] = 'application/json'
+    def provider
+      "wordpress"
     end
 
-    JSON.parse res.env[:body]
-  end
+    def post(post, _url="")
+      res = Faraday.new(url: "https://public-api.wordpress.com").post do |req|
+        req.url "/rest/v1/sites/#{uid}/posts/new"
+        req.body = post_body(post).to_json
+        req.headers["Authorization"] = "Bearer #{access_token}"
+        req.headers["Content-Type"] = "application/json"
+      end
 
-  def post_body post
-    {
-     title: post.message.title(length: 40),
-     content: post.message.markdownified(disable_hovercards: true)
-    }
-  end
+      JSON.parse res.env[:body]
+    end
 
+    def post_body(post)
+      {
+        title:   post.message.title,
+        content: post.message.markdownified(disable_hovercards: true)
+      }
+    end
+  end
 end

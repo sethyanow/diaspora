@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Services::Tumblr < Service
   MAX_CHARACTERS = 1000
 
@@ -16,16 +18,18 @@ class Services::Tumblr < Service
   def post(post, url='')
     body = build_tumblr_post(post, url)
     user_info = JSON.parse(client.get("/v2/user/info").body)
-    blogs = user_info["response"]["user"]["blogs"].map { |blog| URI.parse(blog['url']) }
+    blogs = user_info["response"]["user"]["blogs"]
+    primaryblog = blogs.find {|blog| blog["primary"] } || blogs[0]
     tumblr_ids = {}
-    blogs.each do |blog|
-      resp = client.post("/v2/blog/#{blog.host}/post", body)
-      if resp.code == "201"
-        tumblr_ids[blog.host.to_s] = JSON.parse(resp.body)["response"]["id"]
-      end
+
+    blogurl = URI.parse(primaryblog["url"])
+    resp = client.post("/v2/blog/#{blogurl.host}/post", body)
+    if resp.code == "201"
+      tumblr_ids[blogurl.host.to_s] = JSON.parse(resp.body)["response"]["id"]
+    end
+
     post.tumblr_ids = tumblr_ids.to_json
     post.save
-    end
   end
 
   def build_tumblr_post(post, url)
@@ -33,21 +37,22 @@ class Services::Tumblr < Service
   end
 
   def tumblr_template(post, url)
-    html = ''
-    post.photos.each do |photo|
-      html << "![photo](#{photo.url(:scaled_full)})\n\n"
-    end
-    html << post.message.html(mentioned_people: [])
-    html << "\n\n[original post](#{url})"
+    photo_html = post.photos.map {|photo|
+      "![photo](#{photo.url(:scaled_full)})\n\n"
+    }.join
+
+    "#{photo_html}#{post.message.html(mentioned_people: [])}\n\n[original post](#{url})"
   end
 
-  def delete_post(post)
-    if post.present? && post.tumblr_ids.present?
-      Rails.logger.debug("event=delete_from_service type=tumblr sender_id=#{self.user_id}")
-      tumblr_posts = JSON.parse(post.tumblr_ids)
-      tumblr_posts.each do |blog_name,post_id|
-        delete_from_tumblr(blog_name, post_id)
-      end
+  def post_opts(post)
+    {tumblr_ids: post.tumblr_ids} if post.tumblr_ids.present?
+  end
+
+  def delete_from_service(opts)
+    logger.debug "event=delete_from_service type=tumblr sender_id=#{user_id} tumblr_ids=#{opts[:tumblr_ids]}"
+    tumblr_posts = JSON.parse(opts[:tumblr_ids])
+    tumblr_posts.each do |blog_name, post_id|
+      delete_from_tumblr(blog_name, post_id)
     end
   end
 

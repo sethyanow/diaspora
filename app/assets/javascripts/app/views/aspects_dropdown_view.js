@@ -1,4 +1,6 @@
-/* 
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
+
+/*
  * Aspects view for the publishers aspect dropdown and the aspect membership dropdown.
  */
 app.views.AspectsDropdown = app.views.Base.extend({
@@ -29,13 +31,13 @@ app.views.AspectsDropdown = app.views.Base.extend({
     var button = this.$('.btn.dropdown-toggle'),
       selectedAspects = this.$(".dropdown-menu > li.selected").length,
       buttonText;
-    
-    if (selectedAspects == 0) {
+
+    if (selectedAspects === 0) {
       button.removeClass(inAspectClass).addClass('btn-default');
       buttonText = Diaspora.I18n.t("aspect_dropdown.select_aspects");
     } else {
       button.removeClass('btn-default').addClass(inAspectClass);
-      if (selectedAspects == 1) {
+      if (selectedAspects === 1) {
         buttonText = this.$(".dropdown-menu > li.selected .text").first().text();
       } else {
         buttonText = Diaspora.I18n.t("aspect_dropdown.toggle", { count: selectedAspects.toString() });
@@ -45,3 +47,5 @@ app.views.AspectsDropdown = app.views.Base.extend({
     button.find('.text').text(buttonText);
   }
 });
+// @license-end
+

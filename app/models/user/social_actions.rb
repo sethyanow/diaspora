@@ -1,7 +1,10 @@
+# frozen_string_literal: true
+
 module User::SocialActions
   def comment!(target, text, opts={})
-    find_or_create_participation!(target)
-    Comment::Generator.new(self, target, text).create!(opts)
+    Comment::Generator.new(self, target, text).create!(opts).tap do
+      update_or_create_participation!(target)
+    end
   end
 
   def participate!(target, opts={})
@@ -9,25 +12,25 @@ module User::SocialActions
   end
 
   def like!(target, opts={})
-    find_or_create_participation!(target)
-    Like::Generator.new(self, target).create!(opts)
+    Like::Generator.new(self, target).create!(opts).tap do
+      update_or_create_participation!(target)
+    end
   end
 
   def participate_in_poll!(target, answer, opts={})
-    find_or_create_participation!(target)
-    PollParticipation::Generator.new(self, target, answer).create!(opts)
+    PollParticipation::Generator.new(self, target, answer).create!(opts).tap do
+      update_or_create_participation!(target)
+    end
   end
 
   def reshare!(target, opts={})
-    find_or_create_participation!(target)
-    reshare = build_post(:reshare, :root_guid => target.guid)
-    reshare.save!
-    Postzord::Dispatcher.defer_build_and_post(self, reshare)
-    reshare
-  end
+    raise I18n.t("reshares.create.error") if target.author.guid == guid
 
-  def build_comment(options={})
-    Comment::Generator.new(self, options.delete(:post), options.delete(:text)).build(options)
+    build_post(:reshare, :root_guid => target.guid).tap do |reshare|
+      reshare.save!
+      update_or_create_participation!(target)
+      Diaspora::Federation::Dispatcher.defer_dispatch(self, reshare)
+    end
   end
 
   def build_conversation(opts={})
@@ -48,7 +51,13 @@ module User::SocialActions
     )
   end
 
-  def find_or_create_participation!(target)
-    participations.where(:target_id => target).first || participate!(target)
+  def update_or_create_participation!(target)
+    return if target.author == person
+    participation = participations.find_by(target_id: target)
+    if participation.present?
+      participation.update!(count: participation.count.next)
+    else
+      participate!(target)
+    end
   end
 end

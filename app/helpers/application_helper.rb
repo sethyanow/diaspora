@@ -1,52 +1,57 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
 module ApplicationHelper
   def pod_name
-    AppConfig.settings.pod_name.present? ? AppConfig.settings.pod_name : "diaspora*"
+    AppConfig.settings.pod_name
   end
 
   def pod_version
-    AppConfig.version.number.present? ? AppConfig.version.number : ""
+    AppConfig.version.number
   end
 
   def changelog_url
+    return AppConfig.settings.changelog_url.get if AppConfig.settings.changelog_url.present?
+
     url = "https://github.com/diaspora/diaspora/blob/master/Changelog.md"
-    url.sub!('/master/', "/#{AppConfig.git_revision}/") if AppConfig.git_revision.present?
-    url
+    return url if AppConfig.git_revision.blank?
+
+    url.sub("/master/", "/#{AppConfig.git_revision}/")
+  end
+
+  def source_url
+    AppConfig.settings.source_url.presence || "#{root_path.chomp('/')}/source.tar.gz"
+  end
+
+  def donations_enabled?
+    AppConfig.settings.paypal_donations.enable? ||
+    AppConfig.settings.liberapay_username.present? ||
+    AppConfig.bitcoin_donation_address.present?
   end
 
   def timeago(time, options={})
     timeago_tag(time, options.merge(:class => 'timeago', :title => time.iso8601, :force => true)) if time
   end
 
-  def bookmarklet
-    raw_bookmarklet
-  end
-
-  def raw_bookmarklet( height = 400, width = 620)
-    "javascript:(function(){f='#{AppConfig.pod_uri.to_s}bookmarklet?url='+encodeURIComponent(window.location.href)+'&title='+encodeURIComponent(document.title)+'&notes='+encodeURIComponent(''+(window.getSelection?window.getSelection():document.getSelection?document.getSelection():document.selection.createRange().text))+'&v=1&';a=function(){if(!window.open(f+'noui=1&jump=doclose','diasporav1','location=yes,links=no,scrollbars=no,toolbar=no,width=#{width},height=#{height}'))location.href=f+'jump=yes'};if(/Firefox/.test(navigator.userAgent)){setTimeout(a,0)}else{a()}})()"
-  end
-
-  def magic_bookmarklet_link
-    bookmarklet
-  end
-
-  def contacts_link
-    if current_user.contacts.size > 0
-      contacts_path
-    else
-      community_spotlight_path
-    end
+  def bookmarklet_code(height=400, width=620)
+    "javascript:" +
+      BookmarkletRenderer.body +
+      "bookmarklet('#{bookmarklet_url}', #{width}, #{height});"
   end
 
   def all_services_connected?
     current_user.services.size == AppConfig.configured_services.size
   end
 
+  def service_unconnected?(service)
+    AppConfig.show_service?(service, current_user) && current_user.services.none? {|x| x.provider == service }
+  end
+
   def popover_with_close_html(without_close_html)
-    without_close_html + link_to(content_tag(:div, nil, :class => 'icons-deletelabel'), "#", :class => 'close')
+    without_close_html + link_to('&times;'.html_safe, "#", :class => 'close')
   end
 
   # Require jQuery from CDN if possible, falling back to vendored copy, and require
@@ -54,15 +59,22 @@ module ApplicationHelper
   def jquery_include_tag
     buf = []
     if AppConfig.privacy.jquery_cdn?
-      version = Jquery::Rails::JQUERY_VERSION
-      buf << [ javascript_include_tag("//code.jquery.com/jquery-#{version}.min.js") ]
-      buf << [ javascript_tag("!window.jQuery && document.write(unescape('#{j javascript_include_tag("jquery")}'));") ]
+      version = Jquery::Rails::JQUERY_3_VERSION
+      buf << [javascript_include_tag("//code.jquery.com/jquery-#{version}.min.js")]
+      buf << [
+        nonced_javascript_tag("!window.jQuery && document.write(unescape('#{j javascript_include_tag('jquery3')}'));")
+      ]
     else
-      buf << [ javascript_include_tag('jquery') ]
+      buf << [javascript_include_tag("jquery3")]
     end
-    buf << [ javascript_include_tag('jquery_ujs') ]
-    buf << [ javascript_tag("jQuery.ajaxSetup({'cache': false});") ]
-    buf << [ javascript_tag("$.fx.off = true;") ] if Rails.env.test?
+    buf << [javascript_include_tag("jquery_ujs")]
+    buf << [nonced_javascript_tag("jQuery.ajaxSetup({'cache': false});")]
+    buf << [nonced_javascript_tag("$.fx.off = true;")] if Rails.env.test?
     buf.join("\n").html_safe
+  end
+
+  def qrcode_uri
+    label = current_user.username
+    current_user.otp_provisioning_uri(label, issuer: AppConfig.environment.url)
   end
 end

@@ -1,22 +1,38 @@
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
+
 app.views.Poll = app.views.Base.extend({
   templateName: "poll",
 
   events: {
     "click .submit" : "clickSubmit",
-    "click .toggle_result" : "toggleResult"
+    "click .toggle-result": "toggleResult"
   },
 
-  initialize: function(options) {
+  initialize: function() {
     this.model.bind('change', this.render, this);
   },
 
   presenter: function(){
     var defaultPresenter = this.defaultPresenter();
-    var show_form = defaultPresenter.loggedIn && 
-                    !this.model.attributes.already_participated_in_poll;
+    var isReshare = (this.model.get('post_type') === 'Reshare');
+    var showForm = defaultPresenter.loggedIn &&
+                   !isReshare &&
+                   !this.model.get("poll_participation_answer_id");
+    var originalPostLink = isReshare && this.model.get('root') ?
+      '<a href="/posts/' + this.model.get('root').id + '" class="root_post_link">' + Diaspora.I18n.t('poll.original_post') + '</a>' :
+      '';
+    var answerGiven = this.model.get("poll_participation_answer_id");
+
+    if (defaultPresenter.poll && defaultPresenter.poll.poll_answers) {
+      defaultPresenter.poll.poll_answers.forEach(function(answer) {
+        _.extend(answer, {isCurrentUserVote: answerGiven ? answer.id === answerGiven : false});
+      });
+    }
 
     return _.extend(defaultPresenter, {
-      show_form: show_form 
+      show_form: showForm,
+      is_reshare: isReshare,
+      originalPostLink: originalPostLink
     });
   },
 
@@ -39,7 +55,7 @@ app.views.Poll = app.views.Base.extend({
         percent = Math.round(answer.vote_count / participation_count * 100);
       }
 
-      var progressBar = _this.$(".poll_progress_bar[data-answerid="+answer.id+"]");
+      var progressBar = _this.$(".progress-bar[data-answerid=" + answer.id + "]");
 
       _this.setProgressBarData(progressBar, percent);
     });
@@ -52,8 +68,8 @@ app.views.Poll = app.views.Base.extend({
 
   pollButtons: function() {
     if(!this.poll || !this.poll.post_id) {
-      this.$('.submit').attr('disabled', true);
-      this.$('.toggle_result').attr('disabled', true);
+      this.$(".submit").attr("disabled", true);
+      this.$(".toggle-result").attr("disabled", true);
     }
   },
 
@@ -67,21 +83,21 @@ app.views.Poll = app.views.Base.extend({
     }
     this.toggleElements();
 
-    var toggle_result = this.$('.toggle_result');
+    var toggleResult = this.$(".toggle-result");
 
     if(!this.toggleMode) {
-      toggle_result.html(Diaspora.I18n.t("poll.close_result"));
+      toggleResult.html(Diaspora.I18n.t("poll.close_result"));
       this.toggleMode = 1;
     }
     else {
-      toggle_result.html(Diaspora.I18n.t("poll.show_result"));
+      toggleResult.html(Diaspora.I18n.t("poll.show_result"));
       this.toggleMode = 0;
     }
   },
 
   toggleElements: function() {
-    this.$('.percentage').toggle();
-    this.$('.progress').toggle();
+    this.$(".poll-result").toggle();
+    this.$(".progress").toggle();
   },
 
   clickSubmit: function(evt) {
@@ -95,7 +111,7 @@ app.views.Poll = app.views.Base.extend({
     var pollParticipation = new app.models.PollParticipation({
       poll_answer_id: answer_id,
       poll_id: this.poll.poll_id,
-      post_id: this.poll.post_id, 
+      post_id: this.poll.post_id,
     });
     var _this = this;
 
@@ -107,3 +123,4 @@ app.views.Poll = app.views.Base.extend({
   }
 
 });
+// @license-end

@@ -2,35 +2,44 @@
 -#   licensed under the Affero General Public License version 3 or later.  See
 -#   the COPYRIGHT file.
 
-.span12
-  #author_info
-    = person_image_tag @person, :thumb_medium
-    .content
-      %h2
-        = @person.name
-      %span.description
-        = @person.diaspora_handle
-      .clear
-    .bottom_bar
-      - if !@person.tag_string.blank? && user_signed_in?
-        = Diaspora::Taggable.format_tags(@person.tag_string)
+#author_info.header-full-width
+  = person_image_tag @person, :thumb_medium
+  .content
+    %h2
+      = @person.name
+    %span.description
+      = @person.diaspora_handle
+    - if user_signed_in? && @person != current_user.person
+      - if @presenter.full_hash[:block]
+        .pull-right
+          = link_to t("users.privacy_settings.stop_ignoring"),
+            block_path(@presenter.full_hash[:block][:id]),
+            class: "btn btn-danger",
+            method: :delete
+      - else
+        = render "aspect_memberships/aspect_membership_dropdown"
+    .clear
+  - if user_signed_in? && @person != current_user.person && !@presenter.full_hash[:block]
+    .mobile-icon-bar
+      = link_to "",
+        blocks_path(block: {person_id: @person.id}),
+        data: {confirm: t("are_you_sure_ignore_user")},
+        method: :post,
+        confirm: true,
+        class: "btn entypo-block shield mobile-icon-bar-button"
+    .clear
+  .bottom-bar
+    - if !@person.tag_string.blank? && user_signed_in?
+      = Diaspora::Taggable.format_tags(@person.tag_string)
 
-.span12.profile_stream
-  - if @stream.stream_posts.length > 0
-    - if @post_type == :photos
-      = render 'photos/index', :photos => @stream.stream_posts
+- if @post_type == :photos
+  = render "photos/index", photos: @posts
+- else
+  .stream#main-stream
+    - if @stream.stream_posts.length > 0
+      = render "shared/stream", posts: @stream.stream_posts
+      = render "shared/stream_more_button"
     - else
-      #main_stream.stream
-        = render 'shared/stream', :posts => @stream.stream_posts
-        #pagination
-          %a.more-link.paginate{:href => next_page_path}
-            %h1
-              = t("more")
-  - else
-    #main_stream
       .dull
-      - if @block.present?
-        = t('.ignoring', :name => @person.first_name)
-      - elsif user_signed_in? && (current_user.person != @person)
-        = t('.has_not_shared_with_you_yet', :name => @person.first_name)
-
+      - if user_signed_in? && (current_user.person != @person)
+        = t(".has_not_shared_with_you_yet", name: @person.first_name)

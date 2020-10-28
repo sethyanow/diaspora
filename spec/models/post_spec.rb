@@ -1,15 +1,10 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-require 'spec_helper'
-
 describe Post, :type => :model do
-  before do
-    @user = alice
-    @aspect = @user.aspects.create(:name => "winners")
-  end
-
   describe 'scopes' do
     describe '.owned_or_visible_by_user' do
       before do
@@ -47,6 +42,21 @@ describe Post, :type => :model do
       end
     end
 
+    describe ".all_public" do
+      it "includes all public posts" do
+        post1 = FactoryGirl.create(:status_message, author: alice.person, public: true)
+        post2 = FactoryGirl.create(:status_message, author: bob.person, public: true)
+        post3 = FactoryGirl.create(:status_message, author: eve.person, public: true)
+        expect(Post.all_public.ids).to match_array([post1.id, post2.id, post3.id])
+      end
+
+      it "doesn't include any private posts" do
+        FactoryGirl.create(:status_message, author: alice.person, public: false)
+        FactoryGirl.create(:status_message, author: bob.person, public: false)
+        FactoryGirl.create(:status_message, author: eve.person, public: false)
+        expect(Post.all_public.ids).to eq([])
+      end
+    end
 
     describe '.for_a_stream' do
       it 'calls #for_visible_shareable_sql' do
@@ -57,12 +67,12 @@ describe Post, :type => :model do
 
       it 'calls includes_for_a_stream' do
         expect(Post).to receive(:includes_for_a_stream)
-        Post.for_a_stream(double, double)
+        Post.for_a_stream(Time.zone.now, "created_at")
       end
 
       it 'calls excluding_blocks if a user is present' do
         expect(Post).to receive(:excluding_blocks).with(alice).and_return(Post)
-        Post.for_a_stream(double, double, alice)
+        Post.for_a_stream(Time.zone.now, "created_at", alice)
       end
     end
 
@@ -148,20 +158,65 @@ describe Post, :type => :model do
           Post.for_visible_shareable_sql(Time.now + 1, "created_at")
         end
 
-      end
+        context "with two posts with the same timestamp" do
+          before do
+            aspect_id = alice.aspects.where(name: "generic").first.id
+            Timecop.freeze Time.now do
+              alice.post(:status_message, text: "first", to: aspect_id)
+              alice.post(:status_message, text: "second", to: aspect_id)
+            end
+          end
 
-      # @posts[0] is the newest, @posts[5] is the oldest
-      describe ".newer" do
-        it 'returns the next post in the array' do
-          expect(@posts[3].created_at).to be < @posts[2].created_at #post 2 is newer
-          expect(Post.newer(@posts[3]).created_at.to_s).to eq(@posts[2].created_at.to_s) #its the newer post, not the newest
+          it "returns them in reverse creation order" do
+            posts = Post.for_visible_shareable_sql(Time.now + 1, "created_at")
+            expect(posts.first.text).to eq("second")
+            expect(posts.second.text).to eq("first")
+            expect(posts.last.text).to eq("alice - 5")
+          end
+        end
+      end
+    end
+
+    describe ".subscribed_by" do
+      let(:user) { FactoryGirl.create(:user) }
+
+      context "when the user has a participation on a post" do
+        let(:post) { FactoryGirl.create(:status_message_with_participations, participants: [user]) }
+
+        it "includes the post to the result set" do
+          expect(Post.subscribed_by(user)).to eq([post])
         end
       end
 
-      describe ".older" do
-        it 'returns the previous post in the array' do
-          expect(Post.older(@posts[3]).created_at.to_s).to eq(@posts[4].created_at.to_s) #its the older post, not the oldest
-          expect(@posts[3].created_at).to be > @posts[4].created_at #post 4 is older
+      context "when the user doens't have a participation on a post" do
+        before do
+          FactoryGirl.create(:status_message)
+        end
+
+        it "returns empty result set" do
+          expect(Post.subscribed_by(user)).to be_empty
+        end
+      end
+    end
+
+    describe ".reshared_by" do
+      let(:person) { FactoryGirl.create(:person) }
+
+      context "when the person has a reshare for a post" do
+        let(:post) { FactoryGirl.create(:reshare, author: person).root }
+
+        it "includes the post to the result set" do
+          expect(Post.reshared_by(person)).to eq([post])
+        end
+      end
+
+      context "when the person has no reshare for a post" do
+        before do
+          FactoryGirl.create(:status_message)
+        end
+
+        it "returns empty result set" do
+          expect(Post.reshared_by(person)).to be_empty
         end
       end
     end
@@ -183,21 +238,11 @@ describe Post, :type => :model do
 
   describe 'deletion' do
     it 'should delete a posts comments on delete' do
-      post = FactoryGirl.create(:status_message, :author => @user.person)
-      @user.comment!(post, "hey")
+      post = FactoryGirl.create(:status_message, author: alice.person)
+      alice.comment!(post, "hey")
       post.destroy
       expect(Post.where(:id => post.id).empty?).to eq(true)
       expect(Comment.where(:text => "hey").empty?).to eq(true)
-    end
-  end
-
-  describe 'serialization' do
-    it 'should serialize the handle and not the sender' do
-      post = @user.post :status_message, :text => "hello", :to => @aspect.id
-      xml = post.to_diaspora_xml
-
-      expect(xml.include?("person_id")).to be false
-      expect(xml.include?(@user.person.diaspora_handle)).to be true
     end
   end
 
@@ -208,35 +253,68 @@ describe Post, :type => :model do
     end
   end
 
-  describe '#mutable?' do
-    it 'should be false by default' do
-      post = @user.post :status_message, :text => "hello", :to => @aspect.id
-      expect(post.mutable?).to eq(false)
-    end
-  end
+  describe "#subscribers" do
+    let(:user) { FactoryGirl.create(:user_with_aspect) }
 
-  describe '#subscribers' do
-    it 'returns the people contained in the aspects the post appears in' do
-      post = @user.post :status_message, :text => "hello", :to => @aspect.id
-
-      expect(post.subscribers(@user)).to eq([])
-    end
-
-    it 'returns all a users contacts if the post is public' do
-      post = @user.post :status_message, :text => "hello", :to => @aspect.id, :public => true
-
-      expect(post.subscribers(@user).to_set).to eq(@user.contact_people.to_set)
-    end
-  end
-
-  describe 'Likeable#update_likes_counter' do
     before do
-      @post = bob.post :status_message, :text => "hello", :to => 'all'
+      user.share_with(alice.person, user.aspects.first)
+    end
+
+    context "private" do
+      it "returns the people contained in the aspects the post appears in" do
+        post = user.post(:status_message, text: "hello", to: user.aspects.first.id)
+
+        expect(post.subscribers).to eq([alice.person])
+      end
+
+      it "returns empty if posted to an empty aspect" do
+        empty_aspect = user.aspects.create(name: "empty")
+
+        post = user.post(:status_message, text: "hello", to: empty_aspect.id)
+
+        expect(post.subscribers).to eq([])
+      end
+    end
+
+    context "public" do
+      let(:post) { user.post(:status_message, text: "hello", public: true) }
+
+      it "returns the author to ensure local delivery" do
+        lonely_user = FactoryGirl.create(:user)
+        lonely_post = lonely_user.post(:status_message, text: "anyone?", public: true)
+        expect(lonely_post.subscribers).to match_array([lonely_user.person])
+      end
+
+      it "returns all a users contacts if the post is public" do
+        second_aspect = user.aspects.create(name: "winners")
+        user.share_with(bob.person, second_aspect)
+
+        expect(post.subscribers).to match_array([alice.person, bob.person, user.person])
+      end
+
+      it "adds resharers to subscribers" do
+        FactoryGirl.create(:reshare, root: post, author: eve.person)
+
+        expect(post.subscribers).to match_array([alice.person, eve.person, user.person])
+      end
+
+      it "adds participants to subscribers" do
+        eve.participate!(post)
+
+        expect(post.subscribers).to match_array([alice.person, eve.person, user.person])
+      end
+    end
+  end
+
+  describe "Likeable#update_likes_counter" do
+    before do
+      @post = bob.post(:status_message, text: "hello", public: true)
       bob.like!(@post)
     end
-    it 'does not update updated_at' do
-      old_time = Time.zone.now - 10000
-      Post.where(:id => @post.id).update_all(:updated_at => old_time)
+
+    it "does not update updated_at" do
+      old_time = Time.zone.now - 100
+      Post.where(id: @post.id).update_all(updated_at: old_time)
       expect(@post.reload.updated_at.to_i).to eq(old_time.to_i)
       @post.update_likes_counter
       expect(@post.reload.updated_at.to_i).to eq(old_time.to_i)
@@ -244,87 +322,29 @@ describe Post, :type => :model do
   end
 
   describe "#receive" do
-    it 'returns false if the post does not verify' do
-      @post = FactoryGirl.create(:status_message, :author => bob.person)
-      expect(@post).to receive(:verify_persisted_shareable).and_return(false)
-      expect(@post.receive(bob, eve.person)).to eq(false)
-    end
-  end
-
-  describe "#receive_persisted" do
-    before do
-      @post = FactoryGirl.create(:status_message, :author => bob.person)
-      @known_post = Post.new
-      allow(bob).to receive(:contact_for).with(eve.person).and_return(double(:receive_shareable => true))
+    it "creates a share visibility for the user" do
+      user_ids = [alice.id, eve.id]
+      post = FactoryGirl.create(:status_message, author: bob.person)
+      expect(ShareVisibility).to receive(:batch_import).with(user_ids, post)
+      post.receive(user_ids)
     end
 
-    context "user knows about the post" do
-      before do
-        allow(bob).to receive(:find_visible_shareable_by_id).and_return(@known_post)
-      end
-
-      it 'updates attributes only if mutable' do
-        allow(@known_post).to receive(:mutable?).and_return(true)
-        expect(@known_post).to receive(:update_attributes)
-        expect(@post.send(:receive_persisted, bob, eve.person, @known_post)).to eq(true)
-      end
-
-      it 'returns false if trying to update a non-mutable object' do
-        allow(@known_post).to receive(:mutable?).and_return(false)
-        expect(@known_post).not_to receive(:update_attributes)
-        expect(@post.send(:receive_persisted, bob, eve.person, @known_post)).to eq(false)
-      end
+    it "does nothing for public post" do
+      post = FactoryGirl.create(:status_message, author: bob.person, public: true)
+      expect(ShareVisibility).not_to receive(:batch_import)
+      post.receive([alice.id])
     end
 
-    context "the user does not know about the post" do
-      before do
-        allow(bob).to receive(:find_visible_shareable_by_id).and_return(nil)
-        allow(bob).to receive(:notify_if_mentioned).and_return(true)
-      end
-
-      it "receives the post from the contact of the author" do
-        expect(@post.send(:receive_persisted, bob, eve.person, @known_post)).to eq(true)
-      end
-
-      it 'notifies the user if they are mentioned' do
-        allow(bob).to receive(:contact_for).with(eve.person).and_return(double(:receive_shareable => true))
-        expect(bob).to receive(:notify_if_mentioned).and_return(true)
-
-        expect(@post.send(:receive_persisted, bob, eve.person, @known_post)).to eq(true)
-      end
-    end
-  end
-
-  describe '#receive_non_persisted' do
-    context "the user does not know about the post" do
-      before do
-        @post = FactoryGirl.create(:status_message, :author => bob.person)
-        allow(bob).to receive(:find_visible_shareable_by_id).and_return(nil)
-        allow(bob).to receive(:notify_if_mentioned).and_return(true)
-      end
-
-      it "it receives the post from the contact of the author" do
-        expect(bob).to receive(:contact_for).with(eve.person).and_return(double(:receive_shareable => true))
-        expect(@post.send(:receive_non_persisted, bob, eve.person)).to eq(true)
-      end
-
-      it 'notifies the user if they are mentioned' do
-        allow(bob).to receive(:contact_for).with(eve.person).and_return(double(:receive_shareable => true))
-        expect(bob).to receive(:notify_if_mentioned).and_return(true)
-
-        expect(@post.send(:receive_non_persisted, bob, eve.person)).to eq(true)
-      end
-
-      it 'returns false if the post does not save' do
-        allow(@post).to receive(:save).and_return(false)
-        expect(@post.send(:receive_non_persisted, bob, eve.person)).to eq(false)
-      end
+    it "does nothing if no recipients provided" do
+      post = FactoryGirl.create(:status_message, author: bob.person)
+      expect(ShareVisibility).not_to receive(:batch_import)
+      post.receive([])
     end
   end
 
   describe '#reshares_count' do
     before :each do
-      @post = @user.post :status_message, :text => "hello", :to => @aspect.id, :public => true
+      @post = alice.post(:status_message, text: "hello", public: true)
       expect(@post.reshares.size).to eq(0)
     end
 
@@ -370,43 +390,12 @@ describe Post, :type => :model do
     end
   end
 
-  describe "#find_by_guid_or_id_with_user" do
-    it "succeeds with an id" do
-      post = FactoryGirl.create :status_message, public: true
-      expect(Post.find_by_guid_or_id_with_user(post.id)).to eq(post)
-    end
-
-    it "succeeds with an guid" do
-      post = FactoryGirl.create :status_message, public: true
-      expect(Post.find_by_guid_or_id_with_user(post.guid)).to eq(post)
-    end
-
-    it "looks up on the passed user object if it's non-nil" do
-      post = FactoryGirl.create :status_message
-      user = double
-      expect(user).to receive(:find_visible_shareable_by_id).with(Post, post.id, key: :id).and_return(post)
-      Post.find_by_guid_or_id_with_user post.id, user
-    end
-
-    it "raises ActiveRecord::RecordNotFound with a non-existing id and a user" do
-      user = double(find_visible_shareable_by_id: nil)
-      expect {
-        Post.find_by_guid_or_id_with_user 123, user
-      }.to raise_error ActiveRecord::RecordNotFound
-    end
-
-    it "raises Diaspora::NonPublic for a non-existing id without a user" do
-      allow(Post).to receive_messages where: double(includes: double(first: nil))
-      expect {
-        Post.find_by_guid_or_id_with_user 123
-      }.to raise_error Diaspora::NonPublic
-    end
-
-    it "raises Diaspora::NonPublic for a private post without a user" do
-      post = FactoryGirl.create :status_message
-      expect {
-        Post.find_by_guid_or_id_with_user post.id
-      }.to raise_error Diaspora::NonPublic
+  describe "#before_destroy" do
+    it "removes root_guid from reshares" do
+      post = FactoryGirl.create(:status_message, author: alice.person, public: true)
+      reshare = FactoryGirl.create(:reshare, author: bob.person, root: post)
+      post.destroy!
+      expect(reshare.reload.root_guid).to be_nil
     end
   end
 end

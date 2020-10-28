@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+
 # Copyright (c) 2010-2011, Diaspora Inc.  This file is
 # licensed under the Affero General Public License version 3 or later.  See
 # the COPYRIGHT file.
@@ -15,7 +17,7 @@ require 'active_support/core_ext/class/attribute_accessors'
 require 'active_support/core_ext/object/blank'
 require 'active_support/core_ext/module/delegation'
 
-class Rails
+module Rails
   def self.root
     @@root ||= Pathname.new(File.expand_path(File.join(File.dirname(__FILE__), "..")))
   end

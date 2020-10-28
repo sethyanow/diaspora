@@ -1,5 +1,9 @@
+# frozen_string_literal: true
+
 module NotificationMailers
   class Base
+    include Diaspora::Logging
+
     attr_accessor :recipient, :sender
 
     delegate :unconfirmed_email, :confirm_email_token,
@@ -8,8 +12,8 @@ module NotificationMailers
 
     def initialize(recipient_id, sender_id=nil, *args)
       @headers = {}
-      @recipient = User.find_by_id(recipient_id)
-      @sender = Person.find_by_id(sender_id) if sender_id.present?
+      @recipient = User.find(recipient_id)
+      @sender = Person.find(sender_id) if sender_id.present?
 
       log_mail(recipient_id, sender_id, self.class.to_s.underscore)
 
@@ -29,14 +33,16 @@ module NotificationMailers
     end
 
     private
+
     def default_headers
       headers = {
-        :from => AppConfig.mail.sender_address.get,
-        :host => "#{AppConfig.pod_uri.host}",
-        :to => name_and_address(@recipient.name, @recipient.email)
+        from: "\"#{AppConfig.settings.pod_name}\" <#{AppConfig.mail.sender_address}>",
+        host: "#{AppConfig.pod_uri.host}",
+        to:   name_and_address(@recipient.name, @recipient.email)
       }
-
-      headers[:from] = "\"#{@sender.name} (diaspora*)\" <#{AppConfig.mail.sender_address}>" if @sender.present?
+      return headers if @sender.blank?
+      sender_in_header = @sender.profile.full_name.empty? ? @sender.username : @sender.name
+      headers[:from] = "\"#{AppConfig.settings.pod_name} (#{sender_in_header})\" <#{AppConfig.mail.sender_address}>"
 
       headers
     end
@@ -46,14 +52,11 @@ module NotificationMailers
     end
 
     def log_mail(recipient_id, sender_id, type)
-      log_string = "event=mail mail_type=#{type} recipient_id=#{recipient_id} sender_id=#{sender_id}"
-      if @recipient && @sender
-        log_string << "models_found=true sender_handle=#{@sender.diaspora_handle} recipient_handle=#{@recipient.diaspora_handle}"
-      else
-        log_string << "models_found=false"
-      end
+      log_string = "event=mail mail_type=#{type} recipient_id=#{recipient_id} sender_id=#{sender_id} " \
+                   " recipient_handle=#{@recipient.diaspora_handle}"
+      log_string = "#{log_string} sender_handle=#{@sender.diaspora_handle}" if sender_id.present?
 
-      Rails.logger.info(log_string)
+      logger.info log_string
     end
   end
 end

@@ -1,4 +1,4 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
 describe Workers::Mail::InviteEmail do
   let(:emails) { ['foo@bar.com', 'baz@bar.com'] }
@@ -9,6 +9,6 @@ describe Workers::Mail::InviteEmail do
     expect(EmailInviter).to receive(:new).with(emails, alice, message: message)
       .and_return(email_inviter)
     expect(email_inviter).to receive(:send!)
-    Workers::Mail::InviteEmail.new.perform(emails, alice, message: message)
+    Workers::Mail::InviteEmail.new.perform(emails, alice.id, message: message)
   end
 end

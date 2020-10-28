@@ -1,4 +1,5 @@
-require 'spec_helper'
+# frozen_string_literal: true
+
 describe Workers::GatherOEmbedData do
   before do
     @flickr_oembed_data = {
@@ -16,9 +17,10 @@ describe Workers::GatherOEmbedData do
       "url" => "https://farm4.static.flickr.com/3123/2341623661_7c99f48bbf_m.jpg"
     }
 
-    @flickr_oembed_url = 'http://www.flickr.com/services/oembed/'
-    @flickr_photo_url = 'http://www.flickr.com/photos/bees/2341623661'
-    @flickr_oembed_get_request = @flickr_oembed_url+"?format=json&frame=1&iframe=1&maxheight=420&maxwidth=420&url="+@flickr_photo_url
+    @flickr_oembed_url = "https://www.flickr.com/services/oembed/"
+    @flickr_photo_url = "http://www.flickr.com/photos/bees/2341623661"
+    @flickr_oembed_get_request = "#{@flickr_oembed_url}" \
+      "?format=json&frame=1&iframe=1&maxheight=420&maxwidth=420&url=#{@flickr_photo_url}"
 
     @no_oembed_url = 'http://www.we-do-not-support-oembed.com/index.html'
 

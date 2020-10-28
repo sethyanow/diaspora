@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module UserCukeHelpers
 
   # creates a new user object from the factory with some default attributes
@@ -32,7 +34,7 @@ module UserCukeHelpers
   # integration_sessions controller (automatic)
   def automatic_login
     @me ||= FactoryGirl.create(:user_with_aspect, :getting_started => false)
-    visit(new_integration_sessions_path(:user_id => @me.id))
+    visit(new_integration_sessions_path(user_id: @me.id))
     click_button "Login"
   end
 
@@ -43,26 +45,34 @@ module UserCukeHelpers
   end
 
   # checks the page content to see, if the login was successful
-  def confirm_login
-    page.has_content?("#{@me.first_name} #{@me.last_name}")
+  def confirm_login(mobile)
+    if mobile
+      expect(page).to have_css "#menu-badge"
+    else
+      expect(find("#user-menu")).to have_content "#{@me.first_name} #{@me.last_name}".strip
+    end
   end
 
   # delete all cookies, destroying the current session
   def logout
-    $browser.delete_cookie('_session', 'path=/') if $browser
-    $browser.delete_all_visible_cookies if $browser
+    page.driver.clear_cookies
   end
 
   # go to user menu, expand it, and click logout
   def manual_logout
-    find("#user_menu li:first-child a").click
-    find("#user_menu li:last-child a").click
+    find("#user-menu .dropdown-toggle").click
+    find("#user-menu li:last-child a").click
+  end
+
+  def manual_logout_mobile
+    find("#menu-badge").click
+    find("#drawer ul li:last-child a").click
   end
 
   def fill_in_new_user_form
     @username = "ohai"
-    fill_in('user_username', with: @username)
     fill_in('user_email', with: "#{@username}@example.com")
+    fill_in('user_username', with: @username)
     fill_in('user_password', with: 'secret')
     fill_in('user_password_confirmation', with: 'secret')
 
@@ -85,18 +95,18 @@ module UserCukeHelpers
 
   # submit forgot password form to get reset password link
   def submit_forgot_password_form
-    find("#new_user input.button").click
+    find("#new_user input.btn").click
   end
 
-  # fill the reset password form
-  def fill_reset_password_form(new_pass, confirm_pass)
+  # fill the password reset form
+  def fill_password_reset_form(new_pass, confirm_pass)
     fill_in 'user_password', :with => new_pass
     fill_in 'user_password_confirmation', :with => confirm_pass
   end
 
-  # submit reset password form
-  def submit_reset_password_form
-    find(".button").click
+  # submit the password reset form
+  def submit_password_reset_form
+    find(".btn").click
   end
 
   def confirm_not_signed_up

@@ -1,6 +1,11 @@
-class AdminsController < Admin::AdminController
+# frozen_string_literal: true
 
-  use_bootstrap_for :user_search, :weekly_user_stats, :stats, :correlations
+class AdminsController < Admin::AdminController
+  include ApplicationHelper
+
+  def dashboard
+    gon.push(pod_version: pod_version)
+  end
 
   def user_search
     if params[:admins_controller_user_search]
@@ -38,15 +43,19 @@ class AdminsController < Admin::AdminController
     @created_users = User.where("username IS NOT NULL and created_at IS NOT NULL")
     @created_users.find_each do |u|
       week = u.created_at.beginning_of_week.strftime("%Y-%m-%d")
-      @created_users_by_week[week] << u.username
+      @created_users_by_week[week] << {username: u.username, closed_account: u.person.closed_account}
     end
 
-    @selected_week = params[:week] || @created_users_by_week.keys.first
+    @selected_week = params[:week] || @created_users_by_week.keys.last
     @counter = @created_users_by_week[@selected_week].count
   end
 
   def stats
-    @popular_tags = ActsAsTaggableOn::Tagging.joins(:tag).limit(50).order('count(taggings.id) DESC').group(:tag).count
+    @popular_tags = ActsAsTaggableOn::Tagging.joins(:tag)
+                                             .limit(50)
+                                             .order(Arel.sql("count(taggings.id) DESC"))
+                                             .group(:tag)
+                                             .count
 
     case params[:range]
     when "week"
@@ -67,7 +76,10 @@ class AdminsController < Admin::AdminController
       create_hash(model, :range => range)
     end
 
-    @posts_per_day = Post.where("created_at >= ?", Date.today - 21.days).group("DATE(created_at)").order("DATE(created_at) ASC").count
+    @posts_per_day = Post.where("created_at >= ?", Time.zone.today - 21.days)
+                         .group(Arel.sql("DATE(created_at)"))
+                         .order(Arel.sql("DATE(created_at) ASC"))
+                         .count
     @most_posts_within = @posts_per_day.values.max.to_f
 
     @user_count = User.count
@@ -75,10 +87,6 @@ class AdminsController < Admin::AdminController
     #@posts[:new_public] = Post.where(:type => ['StatusMessage','ActivityStreams::Photo'],
     #                                 :public => true).order('created_at DESC').limit(15).all
 
-  end
-
-  def correlations
-    @correlations_hash = Statistics.new.generate_correlations
   end
 
   private

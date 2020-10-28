@@ -1,22 +1,20 @@
 {{#if likesCount}}
   <div class="comment">
     <div class="media">
-      <i class="entypo heart"></i>
+      <i class="entypo-heart"></i>
 
       <div class="bd">
-        {{#unless likes_fetched}}
-          <a href="#" class="expand_likes grey">
+        {{#unless displayAvatars}}
+          <a href="#" class="expand-likes gray">
             {{t "stream.likes" count=likesCount}}
           </a>
 
         {{else}}
 
           {{#each likes}}
-            {{#with author}}
-              <a href="/people/{{guid}}" class="{{hovercardable this}}">
-                <img src="{{avatar.small}}" class="avatar micro" title="{{name}}"/>
-              </a>
-            {{/with}}
+            {{#linkToAuthor author}}
+              {{{personImage this 'small' 'micro'}}}
+            {{/linkToAuthor}}
           {{/each}}
         {{/unless}}
       </div>

@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-require 'spec_helper'
 require Rails.root.join('spec', 'shared_behaviors', 'stream')
 
 describe Stream::Tag do
@@ -32,13 +33,6 @@ describe Stream::Tag do
      stranger_post = stranger.post(:status_message, :text => "#what", :public => true, :to => 'all')
      expect(@stream.posts).to eq([stranger_post])
    end
-
-    it 'displays a post with a comment containing the tag search' do
-      skip "this code is way too slow. need to re-implement in a way that doesn't suck"
-      other_post = bob.post(:status_message, :text => "sup y'all", :to => 'all')
-      FactoryGirl.create(:comment, :text => "#what", :post => other_post)
-      expect(@stream.posts).to eq([other_post])
-    end
   end
 
   context 'without a user' do
@@ -87,9 +81,28 @@ describe Stream::Tag do
 
   describe 'shared behaviors' do
     before do
-      @stream = Stream::Tag.new(FactoryGirl.create(:user), "test")
+      @stream = Stream::Tag.new(FactoryGirl.create(:user), FactoryGirl.create(:tag).name)
     end
     it_should_behave_like 'it is a stream'
+  end
+
+  describe '#stream_posts' do
+    it "returns an empty array if the tag does not exist" do
+      stream = Stream::Tag.new(FactoryGirl.create(:user), "test")
+      expect(stream.stream_posts).to eq([])
+    end
+
+    it "returns an empty array if there are no visible posts for the tag" do
+      alice.post(:status_message, text: "#what", public: false, to: "all")
+      stream = Stream::Tag.new(nil, "what")
+      expect(stream.stream_posts).to eq([])
+    end
+
+    it "returns the post containing the tag" do
+      post = alice.post(:status_message, text: "#what", public: true)
+      stream = Stream::Tag.new(FactoryGirl.create(:user), "what")
+      expect(stream.stream_posts).to eq([post])
+    end
   end
 
   describe '#tag_name=' do

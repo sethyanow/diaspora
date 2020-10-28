@@ -1,6 +1,6 @@
 describe("app.views.Aspect", function(){
   beforeEach(function(){
-    this.aspect = factory.aspect({selected:true});
+    this.aspect = factory.aspectSelection({selected:true});
     this.view = new app.views.Aspect({ model: this.aspect });
   });
 
@@ -9,8 +9,8 @@ describe("app.views.Aspect", function(){
       this.view.render();
     });
 
-    it('should show the aspect selected', function(){
-      expect(this.view.$el.children('.icons-check_yes_ok').hasClass('selected')).toBeTruthy();
+    it("should show the aspect selected", function(){
+      expect(this.view.$el.find(".entypo-check").hasClass("selected")).toBeTruthy();
     });
 
     it('should show the name of the aspect', function(){
@@ -28,7 +28,6 @@ describe("app.views.Aspect", function(){
       it('it should deselect the aspect', function(){
         this.view.$el.children('a.selectable').trigger('click');
         expect(this.view.toggleAspect).toHaveBeenCalled();
-        expect(this.view.$el.children('.icons-check_yes_ok').hasClass('selected')).toBeFalsy();
         expect(app.router.aspects_stream).toHaveBeenCalled();
       });
 

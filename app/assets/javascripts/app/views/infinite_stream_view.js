@@ -1,3 +1,5 @@
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
+
 // Abstract Infinite Scroll View Super Class
 //  Requires:
 //    a stream model, assigned to this.stream
@@ -11,8 +13,10 @@ app.views.InfScroll = app.views.Base.extend({
     this.postViews = this.postViews || [];
     this._resetPostFragments();
 
+    this.showLoader();
     this.bind("loadMore", this.fetchAndshowLoader, this);
     this.stream.bind("fetched", this.finishedLoading, this);
+    this.stream.bind("allItemsLoaded", this.showNoPostsInfo, this);
     this.stream.bind("allItemsLoaded", this.unbindInfScroll, this);
 
     this.collection.bind("add", this.addPostView, this);
@@ -26,13 +30,9 @@ app.views.InfScroll = app.views.Base.extend({
     this.prependedPosts = document.createDocumentFragment();
   },
 
-  postRenderTemplate : function() {
-    if(this.stream.isFetching()) { this.showLoader() }
-  },
-
   createPostView : function(post){
     var postView = new this.postClass({ model: post, stream: this.stream });
-    if (this.collection.at(0).id == post.id) {
+    if (this.collection.at(0).id === post.id) {
       // post is first in collection - insert view at top of the list
       this.postViews.unshift(postView);
     } else {
@@ -44,10 +44,23 @@ app.views.InfScroll = app.views.Base.extend({
   // called for every item inserted in this.collection
   addPostView : function(post) {
     var el = this.createPostView(post).render().el;
-    if (this.collection.at(0).id == post.id) {
+    if (this.collection.at(0).id === post.id) {
         this.prependedPosts.insertBefore(el, this.prependedPosts.firstChild);
     } else {
         this.appendedPosts.appendChild(el);
+    }
+  },
+
+  postRenderTemplate: function() {
+    if (this.postViews.length > 0) {
+      this.$(".no-posts-info").closest(".stream-element").remove();
+    }
+  },
+
+  showNoPostsInfo: function() {
+    if (this.postViews.length === 0) {
+      var noPostsInfo = new app.views.NoPostsInfo();
+      this.$el.append(noPostsInfo.render().el);
     }
   },
 
@@ -56,7 +69,7 @@ app.views.InfScroll = app.views.Base.extend({
   },
 
   renderTemplate : function(){
-    this.renderInitialPosts()
+    this.renderInitialPosts();
   },
 
   renderInitialPosts : function(){
@@ -64,7 +77,7 @@ app.views.InfScroll = app.views.Base.extend({
     var els = document.createDocumentFragment();
     this.stream.items.each(_.bind(function(post){
       els.appendChild(this.createPostView(post).render().el);
-    }, this))
+    }, this));
     this.$el.html(els);
   },
 
@@ -76,13 +89,14 @@ app.views.InfScroll = app.views.Base.extend({
   },
 
   showLoader: function(){
-    $("#paginate .loader").removeClass("hidden")
+    $("#paginate .loader").removeClass("hidden");
   },
 
   finishedAdding: function() {
     this.$el.prepend(this.prependedPosts);
     this.$el.append(this.appendedPosts);
     this._resetPostFragments();
+    this.postRenderTemplate();
   },
 
   finishedLoading: function() {
@@ -95,13 +109,14 @@ app.views.InfScroll = app.views.Base.extend({
   },
 
   infScroll : function() {
-    var $window = $(window)
-      , distFromTop = $window.height() + $window.scrollTop()
-      , distFromBottom = $(document).height() - distFromTop
-      , bufferPx = 500;
+    var $window = $(window),
+        distFromBottom = $(document).height() - $window.height() - $window.scrollTop(),
+        lastElOffset = this.$el.children().last().offset(),
+        elementDistance = lastElOffset ? lastElOffset.top - $window.scrollTop() - 500 : 1;
 
-    if(distFromBottom < bufferPx) {
+    if(elementDistance <= 0 || distFromBottom < 500) {
       this.trigger("loadMore");
     }
   }
 });
+// @license-end

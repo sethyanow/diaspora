@@ -36,21 +36,20 @@ et:
       settings: "Seaded"
       view_all: "Näita kõiki"
     ignore: "Eira"
-    infinite_scroll:
-      no_more: "Rohkem postitusi pole."
     my_activity: "Minu tegevused"
     my_stream: "Voog"
     photo_uploader:
       looking_good: "OMG, sa näed vinge välja!"
-    publisher:
-      at_least_one_aspect: "Sa pead avaldama vähemalt ühe aspekti."
-      limited: "Piiratud - sinu postitust näidatakse vaid neile inimestele kellega sa oled seda jaganud"
-      public: "Avalik - sinu postitus on nähtav kõigile ja leitav otsingumootorite poolt"
-    search_for: "Otsi <%= name %>"
     show_more: "näita veel"
     stream:
       comment: "Kommenteeri"
+      disable_post_notifications: "Lülita selle postituse teavitused välja"
+      enable_post_notifications: "Lülita selle postituse teavitused sisse"
       follow: "Jälgi"
+      followed_tag:
+        add_a_tag: "Lisa silt"
+        follow: "Jälgi"
+        title: "#Jälgitavad sildid"
       hide: "Peida"
       hide_nsfw_posts: "Peida #nsfw postitused"
       like: "Meeldib"
@@ -63,7 +62,9 @@ et:
         one: "Näita veel <%= count %> kommentaari"
         other: "Näita veel <%= count %> kommentaari"
         zero: "Näita veel <%= count %> kommentaari"
+      no_posts_yet: "Ei ole veel kuvamiseks postitusi."
       original_post_deleted: "Postitus on autori poolt eemaldatud."
+      permalink: "Püsiviide"
       public: "Avalik"
       reshare: "Jaga edasi"
       reshares:
@@ -72,26 +73,33 @@ et:
         zero: "<%= count %> edasijagamist"
       show_nsfw_post: "Näita postitust"
       show_nsfw_posts: "Näita kõiki"
+      tags:
+        follow: "Jälgi #<%= tag %>"
+        following: "Jälgin #<%= tag %>"
+        stop_following: "Lõpeta #<%= tag %> jälgimine"
+        stop_following_confirm: "Lõpeta sildi #<%= tag %> jälgimine?"
       unfollow: "Lõpeta jälgimine"
       unlike: "Ei meeldi"
     tags:
       wasnt_that_interesting: "Oki, ma arvan, et <%= tagName %> polnud siiski nii huvitav..."
     timeago:
       day: "üks päev"
-      days: "%d päeva"
+      days:
+        other: "%d päeva"
       hour: "umbes üks tund"
-      hours: "umbes %d tundi"
+      hours:
+        other: "umbes %d tundi"
       minute: "umbes üks minut"
-      minutes: "%d minutit"
+      minutes:
+        other: "%d minutit"
       month: "umbes üks kuu"
-      months: "%d kuud"
+      months:
+        other: "%d kuud"
       prefixAgo: ""
       prefixFromNow: ""
       seconds: "vähem kui üks minut"
       suffixAgo: "tagasi"
       suffixFromNow: "hiljem"
       year: "umbes üks aasta"
-      years: "%d aastat"
-    videos:
-      unknown: "Tundmatu videoformaat"
-      watch: "Vaata seda videot <%= provider %>"
+      years:
+        other: "%d aastat"

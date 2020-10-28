@@ -1,10 +1,11 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2009, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-class Photo < ActiveRecord::Base
-  include Diaspora::Federated::Shareable
-  include Diaspora::Commentable
+class Photo < ApplicationRecord
+  include Diaspora::Federated::Base
   include Diaspora::Shareable
 
   # NOTE API V1 to be extracted
@@ -15,29 +16,30 @@ class Photo < ActiveRecord::Base
     t.add :created_at
     t.add :author
     t.add lambda { |photo|
-      { :small => photo.url(:thumb_small),
-        :medium => photo.url(:thumb_medium),
-        :large => photo.url(:scaled_full) }
+      {
+        small:  photo.url(:thumb_small),
+        medium: photo.url(:thumb_medium),
+        large:  photo.url(:scaled_full),
+        raw:    photo.url
+      }
     }, :as => :sizes
     t.add lambda { |photo|
-      { :height => photo.height,
-        :width => photo.width }
-    }, :as => :dimensions
+      {
+        height: photo.height,
+        width:  photo.width
+      }
+    }, as: :dimensions
+    t.add lambda { |photo|
+      {
+        id: photo.status_message.id
+      } if photo.status_message
+    }, as: :status_message
   end
 
   mount_uploader :processed_image, ProcessedImage
   mount_uploader :unprocessed_image, UnprocessedImage
 
-  xml_attr :remote_photo_path
-  xml_attr :remote_photo_name
-
-  xml_attr :text
-  xml_attr :status_message_guid
-
-  xml_attr :height
-  xml_attr :width
-
-  belongs_to :status_message, :foreign_key => :status_message_guid, :primary_key => :guid
+  belongs_to :status_message, foreign_key: :status_message_guid, primary_key: :guid, optional: true
   validates_associated :status_message
   delegate :author_name, to: :status_message, prefix: true
 
@@ -72,19 +74,15 @@ class Photo < ActiveRecord::Base
     end
   end
 
-  def self.diaspora_initialize(params = {})
-    photo = self.new params.to_hash.slice(:text, :pending)
-    photo.author = params[:author]
-    photo.public = params[:public] if params[:public]
-    photo.pending = params[:pending] if params[:pending]
-    photo.diaspora_handle = photo.author.diaspora_handle
-
+  def self.diaspora_initialize(params={})
+    photo = new(params.to_hash.stringify_keys.slice(*column_names, "author"))
     photo.random_string = SecureRandom.hex(10)
+
+    photo.unprocessed_image.strip_exif = photo.author.owner.strip_exif
 
     if params[:user_file]
       image_file = params.delete(:user_file)
       photo.unprocessed_image.store! image_file
-
     elsif params[:image_url]
       photo.remote_unprocessed_image_url = params[:image_url]
       photo.unprocessed_image.store!
@@ -114,7 +112,12 @@ class Photo < ActiveRecord::Base
   def url(name = nil)
     if remote_photo_path
       name = name.to_s + '_' if name
-      remote_photo_path + name.to_s + remote_photo_name
+      image_url = remote_photo_path + name.to_s + remote_photo_name
+      if AppConfig.privacy.camo.proxy_remote_pod_images?
+        Diaspora::Camo.image_url(image_url)
+      else
+        image_url
+      end
     elsif processed?
       processed_image.url(name)
     else
@@ -134,7 +137,12 @@ class Photo < ActiveRecord::Base
     Workers::ProcessPhoto.perform_async(self.id)
   end
 
-  def mutable?
-    true
+  def self.visible(current_user, person, limit=:all, max_time=nil)
+    photos = if current_user
+               current_user.photos_from(person, limit: limit, max_time: max_time)
+             else
+               Photo.where(author_id: person.id, public: true)
+             end
+    photos.where(pending: false).order("created_at DESC")
   end
 end

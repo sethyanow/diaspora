@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2011, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-class Aspect < ActiveRecord::Base
+class Aspect < ApplicationRecord
   belongs_to :user
 
   has_many :aspect_memberships, :dependent => :destroy
@@ -18,6 +20,10 @@ class Aspect < ActiveRecord::Base
 
   before_validation do
     name.strip!
+  end
+
+  before_create do
+    self.order_id ||= Aspect.where(user_id: user_id).maximum(:order_id || 0).to_i + 1
   end
 
   def to_s

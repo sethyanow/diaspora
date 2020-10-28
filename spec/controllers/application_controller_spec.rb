@@ -1,8 +1,8 @@
+# frozen_string_literal: true
+
 #   Copyright (c) 2010-2012, Diaspora Inc.  This file is
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
-
-require 'spec_helper'
 
 describe ApplicationController, :type => :controller do
   controller do
@@ -20,7 +20,7 @@ describe ApplicationController, :type => :controller do
       get :index
       expect(response.headers['X-Diaspora-Version']).to include AppConfig.version.number.get
     end
-    
+
     context 'with git info' do
       before do
         allow(AppConfig).to receive(:git_available?).and_return(true)
@@ -86,8 +86,76 @@ describe ApplicationController, :type => :controller do
         alice.update_attribute(:getting_started, true)
       end
 
-      it "redirects to getting started if the user has getting started set to true" do
+      it "redirects to getting started if the user has getting started set to true and a blank profile" do
         expect(@controller.send(:after_sign_in_path_for, alice)).to eq(getting_started_path)
+      end
+    end
+
+    context "getting started true and one tag present on user" do
+      before do
+        alice.update_attribute(:getting_started, true)
+        @tag = ActsAsTaggableOn::Tag.create!(name: "partytimeexcellent")
+        allow(@controller).to receive(:current_user).and_return(alice)
+        TagFollowing.create!(tag: @tag, user: alice)
+      end
+
+      it "redirects to stream if the user has getting started set to true and has already added tags" do
+        expect(@controller.send(:after_sign_in_path_for, alice)).to eq(stream_path)
+      end
+    end
+
+    context "getting started true and user image present on user" do
+      before do
+        alice.update_attribute(:getting_started, true)
+        # Just set the image url...
+        alice.profile.image_url = "something not nil"
+        allow(@controller).to receive(:current_user).and_return(alice)
+      end
+
+      it "redirects to stream if the user has getting started set to true and has already added a photo" do
+        expect(@controller.send(:after_sign_in_path_for, alice)).to eq(stream_path)
+      end
+    end
+  end
+
+  describe "#after_sign_out_path_for" do
+    it "can handle a nil HTTP_USER_AGENT" do
+      @request.headers["HTTP_USER_AGENT"] = nil
+      expect(@controller.send(:after_sign_out_path_for, alice)).to eq(new_user_session_path)
+    end
+  end
+
+  describe "#set_grammatical_gender" do
+    it "is called on page load" do
+      expect(@controller).to receive(:set_grammatical_gender)
+      get :index
+    end
+
+    context "for inflected locales" do
+      before do
+        alice.language = :pl
+        alice.save
+      end
+
+      it "returns nil for an empty gender" do
+        alice.person.profile.gender = ""
+        alice.person.profile.save
+        get :index
+        expect(assigns[:grammatical_gender]).to be_nil
+      end
+
+      it "returns nil for an unrecognized gender" do
+        alice.person.profile.gender = "robot"
+        alice.person.profile.save
+        get :index
+        expect(assigns[:grammatical_gender]).to be_nil
+      end
+
+      it "sets the correct grammatical gender" do
+        alice.person.profile.gender = "ona"
+        alice.person.profile.save
+        get :index
+        expect(assigns[:grammatical_gender]).to eq(:f)
       end
     end
   end

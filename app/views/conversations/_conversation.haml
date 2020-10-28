@@ -2,11 +2,13 @@
 -#   licensed under the Affero General Public License version 3 or later.  See
 -#   the COPYRIGHT file.
 
+- conversation = visibility.conversation
 .conversation-wrapper{ :"data-conversation-path" => conversation_path(conversation) }
-  .stream_element.conversation{:data=>{:guid=>conversation.id}, :class => ('unread' if unread_counts[conversation.id].to_i > 0)}
+  .stream-element.conversation{data:  {guid: conversation.id},
+                               class: conversation_class(conversation, visibility.unread, @conversation.try(:id))}
     .media
       .img
-        - other_participants = ordered_participants[conversation.id] - [current_user.person]
+        - other_participants = conversation.ordered_participants - [current_user.person]
         - if other_participants.first.present?
           = person_image_tag(other_participants.first)
           - if other_participants.count > 1
@@ -14,24 +16,23 @@
               = other_participants.count - 1
 
       .bg
-        .badge.badge-dafault.message_count
+        .badge.badge-default.message-count.pull-right
           = conversation.messages.size
-        - unread_count = unread_counts[conversation.id].to_i
-        - if unread_count > 0
-          .badge.badge-important.unread_message_count
-            = unread_count
+        - if visibility.unread > 0
+          .badge.badge-important.unread-message-count.pull-right
+            = visibility.unread
         .subject
           %div{ :class => direction_for(conversation.subject) }
             = conversation.subject
         .timestamp
           = timeago(conversation.updated_at)
-        .last_author
-          - if authors[conversation.id].present?
-            = authors[conversation.id].name
+        .last-author
+          - if conversation.last_author.present?
+            = conversation.last_author.name
         .last_message
           - if conversation.messages.present?
             %em
-              = conversation.messages.last.text
+              = conversation.messages.last.message.plain_text_without_markdown
         - if other_participants.count > 1
           .participants
             - other_participants.drop(1).take(15).each do |participant|

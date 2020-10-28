@@ -1,92 +1,86 @@
-app.views.Notifications = Backbone.View.extend({
+// @license magnet:?xt=urn:btih:0b31508aeb0634b347b8270c7bee4d411b5d4109&dn=agpl-3.0.txt AGPL-v3-or-Later
 
+app.views.Notifications = Backbone.View.extend({
   events: {
-    "click .unread-toggle" : "toggleUnread"
+    "click .unread-toggle": "toggleUnread",
+    "click #mark-all-read-link": "markAllRead"
   },
 
   initialize: function() {
-    Diaspora.page.header.notifications.setUpNotificationPage(this);
-    $(".unread-toggle .entypo").tooltip();
+    $(".unread-toggle .entypo-eye").tooltip();
+    app.helpers.timeago($(document));
+    this.bindCollectionEvents();
+  },
+
+  bindCollectionEvents: function() {
+    this.collection.on("change", this.onChangedUnreadStatus.bind(this));
+    this.collection.on("update", this.updateView.bind(this));
   },
 
   toggleUnread: function(evt) {
-    note = $(evt.target).closest(".stream_element");
-    unread = note.hasClass("unread");
+    var note = $(evt.target).closest(".stream-element");
+    var unread = note.hasClass("unread");
+    var guid = note.data("guid");
+    if (unread) {
+      this.collection.setRead(guid);
+    } else {
+      this.collection.setUnread(guid);
+    }
+  },
+
+  markAllRead: function(evt) {
+    evt.preventDefault();
+    this.collection.setAllRead();
+  },
+
+  onChangedUnreadStatus: function(model) {
+    var unread = model.get("unread");
+    var translationKey = unread ? "notifications.mark_read" : "notifications.mark_unread";
+    var note = $(".stream-element[data-guid=" + model.guid + "]");
+
+    note.find(".entypo-eye")
+      .tooltip("destroy")
+      .removeAttr("data-original-title")
+      .attr("title", Diaspora.I18n.t(translationKey))
+      .tooltip();
 
     if (unread) {
-      this.setRead(note.data("guid"));
-    }
-    else {
-      this.setUnread(note.data("guid"));
-    }
-  },
-
-  setRead: function(guid) {
-    $.ajax({
-      url: "/notifications/" + guid,
-      data: { set_unread: false },
-      type: "PUT",
-      context: this,
-      success: this.clickSuccess
-    });
-  },
-
-  setUnread: function(guid) {
-    $.ajax({
-      url: "/notifications/" + guid,
-      data: { set_unread: true },
-      type: "PUT",
-      context: this,
-      success: this.clickSuccess
-    });
-  },
-
-  clickSuccess: function(data) {
-    type = $('.stream_element[data-guid=' + data["guid"] + ']').data('type');
-    this.updateView(data["guid"], type, data["unread"]);
-  },
-
-  updateView: function(guid, type, unread) {
-    change = unread ? 1 : -1;
-    all_notes = $('ul.nav > li:eq(0) .badge');
-    type_notes = $('ul.nav > li[data-type=' + type + '] .badge');
-    header_badge = $('#notification_badge .badge_count');
-
-    note = $('.stream_element[data-guid=' + guid + ']');
-    if(unread) {
       note.removeClass("read").addClass("unread");
-      $(".unread-toggle .entypo", note)
-        .tooltip('destroy')
-        .removeAttr("data-original-title")
-        .attr('title',Diaspora.I18n.t('notifications.mark_read'))
-        .tooltip();
-    }
-    else {
+    } else {
       note.removeClass("unread").addClass("read");
-      $(".unread-toggle .entypo", note)
-        .tooltip('destroy')
-        .removeAttr("data-original-title")
-        .attr('title',Diaspora.I18n.t('notifications.mark_unread'))
-        .tooltip();
     }
+  },
 
-    all_notes.text( function(i,text) { return parseInt(text) + change });
-    type_notes.text( function(i,text) { return parseInt(text) + change });
-    header_badge.text( function(i,text) { return parseInt(text) + change });
-    if(all_notes.text()>0){
-      all_notes.addClass('badge-important').removeClass('badge-default');
+  updateView: function() {
+    var notificationsContainer = $("#notifications_container");
+
+    // update notification counts in the sidebar
+    Object.keys(this.collection.unreadCountByType).forEach(function(notificationType) {
+      var count = this.collection.unreadCountByType[notificationType];
+      this.updateBadge(notificationsContainer.find("a[data-type=" + notificationType + "] .badge"), count);
+    }.bind(this));
+
+    this.updateBadge(notificationsContainer.find("a[data-type=all] .badge"), this.collection.unreadCount);
+
+    // update notification count in the header
+    this.updateBadge($(".notifications-link .badge"), this.collection.unreadCount);
+
+    var markAllReadLink = $("a#mark-all-read-link");
+
+    if (this.collection.unreadCount > 0) {
+      markAllReadLink.removeClass("disabled");
     } else {
-      all_notes.removeClass('badge-important').addClass('badge-default');
+      markAllReadLink.addClass("disabled");
     }
-    if(type_notes.text()>0){
-      type_notes.addClass('badge-important').removeClass('badge-default');
+  },
+
+  updateBadge: function(badge, count) {
+    badge.text(count);
+    if (count > 0) {
+      badge.removeClass("hidden");
     } else {
-      type_notes.removeClass('badge-important').addClass('badge-default');
-    }
-    if(header_badge.text()>0){
-      header_badge.removeClass('hidden');
-    } else {
-      header_badge.addClass('hidden');
+      badge.addClass("hidden");
     }
   }
 });
+// @license-end

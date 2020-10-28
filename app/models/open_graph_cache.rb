@@ -1,4 +1,6 @@
-class OpenGraphCache < ActiveRecord::Base
+# frozen_string_literal: true
+
+class OpenGraphCache < ApplicationRecord
   validates :title, :presence => true
   validates :ob_type, :presence => true
   validates :image, :presence => true
@@ -13,6 +15,15 @@ class OpenGraphCache < ActiveRecord::Base
     t.add :image
     t.add :description
     t.add :url
+    t.add :video_url
+  end
+
+  def image
+    if AppConfig.privacy.camo.proxy_opengraph_thumbnails?
+      Diaspora::Camo.image_url(self[:image])
+    else
+      self[:image]
+    end
   end
 
   def self.find_or_create_by(opts)
@@ -22,16 +33,26 @@ class OpenGraphCache < ActiveRecord::Base
   end
 
   def fetch_and_save_opengraph_data!
-    response = OpenGraph.new(self.url)
+    uri = URI.parse(url.start_with?("http") ? url : "http://#{url}")
+    uri.normalize!
+    object = OpenGraphReader.fetch!(uri)
 
-    return if response.blank? || response.type.blank?
+    return unless object
 
-    self.title = response.title.truncate(255)
-    self.ob_type = response.type
-    self.image = response.images[0]
-    self.url = response.url
-    self.description = response.description
+    self.title = object.og.title.truncate(255)
+    self.ob_type = object.og.type
+    self.image = object.og.image.url
+    self.url = object.og.url
+    self.description = object.og.description
+    if object.og.video.try(:secure_url) && secure_video_url?(object.og.video.secure_url)
+      self.video_url = object.og.video.secure_url
+    end
 
     self.save
+  rescue OpenGraphReader::NoOpenGraphDataError, OpenGraphReader::InvalidObjectError
+  end
+
+  def secure_video_url?(url)
+    SECURE_OPENGRAPH_VIDEO_URLS.any? {|u| u =~ url }
   end
 end
